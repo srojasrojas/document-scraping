@@ -7,9 +7,14 @@ BACKUP*
 # Cookies and config files
 config.json
 
-# Temporary and output files
+# Temporary input and output files
 tmp/
+input/
+output/
 *.pkl
+*.pdf
+*.ppt
+__pycache__/
 
 # Virtual environment
 docscrapingenv/
