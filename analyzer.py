@@ -1,10 +1,12 @@
 import json
+import os
 import base64
 from pathlib import Path
 from typing import List
 from pydantic_ai import Agent
-from models import ChartData, ImageData, Config, TextData
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.openai import OpenAIModel
+from models import ChartData, ImageData, Config, TextData
 
 
 class DocumentAnalyzer:
@@ -13,20 +15,64 @@ class DocumentAnalyzer:
             config_data = json.load(f)
         self.config = Config(**config_data)
         
-        # Crear agente con modelo de Anthropic
-        model = AnthropicModel(
-            self.config.analysis['model'],
-            api_key=None  # Se maneja automáticamente en claude.ai
-        )
+        # Obtener configuración del proveedor
+        provider = self.config.analysis.get('provider', 'anthropic').lower()
+        model_name = self.config.analysis['model']
         
+        # Crear modelo según el proveedor
+        if provider == 'anthropic':
+            model = self._create_anthropic_model(model_name)
+        elif provider == 'openai':
+            model = self._create_openai_model(model_name)
+        else:
+            raise ValueError(f"Proveedor no soportado: {provider}. Use 'anthropic' o 'openai'")
+        
+        # Crear agente
         self.chart_agent = Agent(
             model=model,
             result_type=ChartData,
             system_prompt=self.config.prompts['chart_analysis']
         )
+        
+        print(f"✓ Agente inicializado con {provider.upper()}: {model_name}")
+    
+    def _create_anthropic_model(self, model_name: str) -> AnthropicModel:
+        """Crea modelo de Anthropic con manejo de API key"""
+        # Intentar obtener API key de diferentes fuentes
+        api_key = (
+            os.getenv('ANTHROPIC_API_KEY') or 
+            self.config.analysis.get('anthropic_api_key') or
+            None  # Para ejecución en claude.ai
+        )
+        
+        if api_key:
+            print(f"  → Usando Anthropic API key desde {'entorno' if os.getenv('ANTHROPIC_API_KEY') else 'config'}")
+        else:
+            print(f"  → Modo claude.ai (sin API key explícita)")
+        
+        return AnthropicModel(model_name, api_key=api_key)
+    
+    def _create_openai_model(self, model_name: str) -> OpenAIModel:
+        """Crea modelo de OpenAI con manejo de API key"""
+        # Para OpenAI, la API key es obligatoria
+        api_key = (
+            os.getenv('OPENAI_API_KEY') or 
+            self.config.analysis.get('openai_api_key')
+        )
+        
+        if not api_key:
+            raise ValueError(
+                "Se requiere API key para OpenAI. Configura:\n"
+                "  1. Variable de entorno: export OPENAI_API_KEY='tu-key'\n"
+                "  2. O en config.json: 'openai_api_key': 'tu-key'"
+            )
+        
+        print(f"  → Usando OpenAI API key desde {'entorno' if os.getenv('OPENAI_API_KEY') else 'config'}")
+        
+        return OpenAIModel(model_name, api_key=api_key)
     
     def analyze_image(self, image_path: str) -> ChartData:
-        """Analiza una imagen (gráfico) usando Claude"""
+        """Analiza una imagen (gráfico) usando el modelo configurado"""
         with open(image_path, 'rb') as f:
             image_data = base64.b64encode(f.read()).decode('utf-8')
         

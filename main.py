@@ -10,7 +10,7 @@ def process_document(file_path: str, config_path: str = "config.json") -> Docume
     """
     Procesa un documento completo:
     1. Extrae texto e imágenes
-    2. Analiza gráficos con Claude
+    2. Analiza gráficos con IA (Claude o OpenAI)
     3. Guarda resultados
     """
     print(f"\n{'='*60}")
@@ -35,7 +35,7 @@ def process_document(file_path: str, config_path: str = "config.json") -> Docume
     # Analizar imágenes
     chart_analysis = []
     if image_data:
-        print(f"   → Analizando {len(image_data)} gráficos con Claude...")
+        print(f"   → Analizando {len(image_data)} gráficos con IA...")
         chart_analysis = analyzer.analyze_all_images(image_data)
         print(f"   ✓ {len(chart_analysis)} gráficos analizados")
     
@@ -81,7 +81,30 @@ def process_document(file_path: str, config_path: str = "config.json") -> Docume
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Procesa documentos PDF/PPT extrayendo texto, imágenes y analizando gráficos"
+        description="Procesa documentos PDF/PPT extrayendo texto, imágenes y analizando gráficos",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Configuración de API Keys:
+  Opción 1 (Recomendada) - Variables de entorno:
+    export ANTHROPIC_API_KEY='tu-key-anthropic'
+    export OPENAI_API_KEY='tu-key-openai'
+  
+  Opción 2 - Archivo config.json:
+    {
+      "analysis": {
+        "provider": "anthropic",  // o "openai"
+        "anthropic_api_key": "tu-key",
+        "openai_api_key": "tu-key"
+      }
+    }
+
+Ejemplos:
+  # Usar con Claude (Anthropic)
+  python main.py documento.pdf
+  
+  # Cambiar a OpenAI (modifica config.json primero)
+  python main.py documento.pdf --config config_openai.json
+        """
     )
     parser.add_argument(
         "file",
@@ -110,6 +133,8 @@ def main():
         print(f"\n✅ Proceso completado exitosamente")
     except Exception as e:
         print(f"\n❌ Error durante el procesamiento: {e}")
+        import traceback
+        traceback.print_exc()
         raise
 
 
