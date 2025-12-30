@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from models import ChartData, ImageData, Config, TextData
 
 
@@ -28,9 +28,9 @@ class DocumentAnalyzer:
             raise ValueError(f"Proveedor no soportado: {provider}. Use 'anthropic' o 'openai'")
         
         # Crear agente
-        self.chart_agent = Agent(
+        self.chart_agent = Agent[None, ChartData](
             model=model,
-            result_type=ChartData,
+            # result_schema=ChartData,
             system_prompt=self.config.prompts['chart_analysis']
         )
         
@@ -52,24 +52,29 @@ class DocumentAnalyzer:
         
         return AnthropicModel(model_name, api_key=api_key)
     
-    def _create_openai_model(self, model_name: str) -> OpenAIModel:
+    def _create_openai_model(self, model_name: str):
         """Crea modelo de OpenAI con manejo de API key"""
-        # Para OpenAI, la API key es obligatoria
+        # OpenAI requiere la API key como variable de entorno
         api_key = (
             os.getenv('OPENAI_API_KEY') or 
             self.config.analysis.get('openai_api_key')
         )
-        
+
         if not api_key:
             raise ValueError(
                 "Se requiere API key para OpenAI. Configura:\n"
                 "  1. Variable de entorno: export OPENAI_API_KEY='tu-key'\n"
                 "  2. O en config.json: 'openai_api_key': 'tu-key'"
             )
-        
-        print(f"  → Usando OpenAI API key desde {'entorno' if os.getenv('OPENAI_API_KEY') else 'config'}")
-        
-        return OpenAIModel(model_name, api_key=api_key)
+
+        # Si la key viene de config.json, establecerla como variable de entorno
+        if not os.getenv('OPENAI_API_KEY'):
+            os.environ['OPENAI_API_KEY'] = api_key
+            print(f"  → Usando OpenAI API key desde config")
+        else:
+            print(f"  → Usando OpenAI API key desde entorno")
+
+        return OpenAIChatModel(model_name)
     
     def analyze_image(self, image_path: str) -> ChartData:
         """Analiza una imagen (gráfico) usando el modelo configurado"""
