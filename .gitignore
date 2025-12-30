@@ -1,0 +1,15 @@
+# VS Code settings
+.vscode/
+
+# Backup files
+BACKUP*
+
+# Cookies and config files
+config.json
+
+# Temporary and output files
+tmp/
+*.pkl
+
+# Virtual environment
+docscrapingenv/

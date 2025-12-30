@@ -1,0 +1,52 @@
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any
+from datetime import datetime
+
+
+class ChartData(BaseModel):
+    """Datos extraídos de un gráfico"""
+    chart_type: str = Field(description="Tipo de gráfico (barra, línea, pie, etc.)")
+    title: Optional[str] = Field(None, description="Título del gráfico")
+    categories: List[str] = Field(default_factory=list, description="Categorías o labels")
+    series: List[Dict[str, Any]] = Field(default_factory=list, description="Series de datos")
+    values: List[float] = Field(default_factory=list, description="Valores numéricos")
+    insights: List[str] = Field(default_factory=list, description="Insights clave")
+    metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas calculadas")
+
+
+class TextData(BaseModel):
+    """Datos extraídos del texto"""
+    page_number: int
+    content: str
+    key_metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas clave encontradas")
+    dates: List[str] = Field(default_factory=list, description="Fechas mencionadas")
+    percentages: List[float] = Field(default_factory=list, description="Porcentajes encontrados")
+    keywords: List[str] = Field(default_factory=list, description="Palabras clave")
+
+
+class ImageData(BaseModel):
+    """Metadatos de imagen extraída"""
+    filename: str
+    page_number: int
+    path: str
+    width: int
+    height: int
+    extracted_at: datetime = Field(default_factory=datetime.now)
+
+
+class DocumentAnalysis(BaseModel):
+    """Análisis completo de un documento"""
+    filename: str
+    total_pages: int
+    extraction_date: datetime = Field(default_factory=datetime.now)
+    text_data: List[TextData] = Field(default_factory=list)
+    image_data: List[ImageData] = Field(default_factory=list)
+    chart_analysis: List[ChartData] = Field(default_factory=list)
+    summary: Optional[str] = None
+
+
+class Config(BaseModel):
+    """Configuración del sistema"""
+    extraction: Dict[str, Any]
+    analysis: Dict[str, Any]
+    prompts: Dict[str, str]
