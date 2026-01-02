@@ -5,6 +5,7 @@ import fitz  # PyMuPDF
 from PIL import Image
 from pptx import Presentation
 from models import ImageData, TextData, Config
+from image_filter import ImageFilter
 import json
 
 
@@ -13,7 +14,17 @@ class DocumentExtractor:
         with open(config_path, 'r') as f:
             config_data = json.load(f)
         self.config = Config(**config_data)
+        self.config_path = config_path
         self._setup_directories()
+        
+        # Inicializar filtro de imágenes si está habilitado
+        filter_config = self.config.extraction.get('image_filter', {})
+        self.filter_enabled = filter_config.get('enabled', True)
+        if self.filter_enabled:
+            self.image_filter = ImageFilter(config_path)
+        else:
+            self.image_filter = None
+            print("⚠️  Filtro de imágenes deshabilitado")
     
     def _setup_directories(self):
         """Crea los directorios necesarios"""
@@ -118,11 +129,26 @@ class DocumentExtractor:
         ext = Path(file_path).suffix.lower()
         
         if ext == '.pdf':
-            return self.extract_pdf(file_path)
+            text_data, image_data = self.extract_pdf(file_path)
         elif ext in ['.ppt', '.pptx']:
-            return self.extract_pptx(file_path)
+            text_data, image_data = self.extract_pptx(file_path)
         else:
             raise ValueError(f"Formato no soportado: {ext}")
+        
+        # Aplicar filtro de imágenes si está habilitado
+        if self.filter_enabled and self.image_filter and image_data:
+            valuable_images, discarded_images = self.image_filter.filter_images(image_data)
+            
+            # Opcionalmente eliminar archivos de imágenes descartadas
+            for img in discarded_images:
+                try:
+                    Path(img.path).unlink()
+                except Exception as e:
+                    print(f"  ⚠️  No se pudo eliminar {img.filename}: {e}")
+            
+            return text_data, valuable_images
+        
+        return text_data, image_data
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ class DocumentAnalyzer:
         self.chart_agent = Agent[None, ChartData](
             model=model,
             # result_schema=ChartData,
+            output_type=ChartData,
             system_prompt=self.config.prompts['chart_analysis']
         )
         
@@ -80,7 +81,7 @@ class DocumentAnalyzer:
         """Analiza una imagen (gráfico) usando el modelo configurado"""
         with open(image_path, 'rb') as f:
             image_data = base64.b64encode(f.read()).decode('utf-8')
-        
+
         # Determinar el tipo MIME
         ext = Path(image_path).suffix.lower()
         mime_types = {
@@ -91,7 +92,7 @@ class DocumentAnalyzer:
             '.webp': 'image/webp'
         }
         media_type = mime_types.get(ext, 'image/png')
-        
+
         # Analizar con el agente
         result = self.chart_agent.run_sync(
             f"Analiza este gráfico y extrae toda la información relevante.",
@@ -109,9 +110,24 @@ class DocumentAnalyzer:
                 ]
             }]
         )
+
+        # Extraer el resultado estructurado
+        if isinstance(result, ChartData):
+            return result
+        elif hasattr(result, 'output') and isinstance(result.output, ChartData):
+            return result.output
+        elif hasattr(result, 'data') and isinstance(result.data, ChartData):
+            return result.data
+        else:
+            # Si no es ChartData, intentar parsear el texto como última opción
+            print(f"  ⚠️  Resultado no estructurado: {type(result)}")
+            # Devolver un ChartData vacío o con error
+            return ChartData(
+                chart_type="unknown",
+                title="Error: No se pudo analizar",
+                description=str(result)[:200] if hasattr(result, '__str__') else "Error desconocido"
+            )
         
-        return result.data
-    
     def analyze_all_images(self, images: List[ImageData]) -> List[ChartData]:
         """Analiza todas las imágenes extraídas"""
         results = []
@@ -119,10 +135,14 @@ class DocumentAnalyzer:
             try:
                 print(f"Analizando {img.filename}...")
                 chart_data = self.analyze_image(img.path)
-                results.append(chart_data)
+                # Solo agregar si es un ChartData válido
+                if isinstance(chart_data, ChartData) and chart_data.chart_type != "unknown":
+                    results.append(chart_data)
+                else:
+                    print(f"  ⚠️  Análisis fallido para {img.filename}")
             except Exception as e:
                 print(f"Error analizando {img.filename}: {e}")
-        
+
         return results
     
     def extract_text_metrics(self, text_data: List[TextData]) -> List[TextData]:
