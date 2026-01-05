@@ -4,14 +4,25 @@ from datetime import datetime
 
 
 class ChartData(BaseModel):
-    """Datos extraídos de un gráfico"""
-    chart_type: str = Field(description="Tipo de gráfico (barra, línea, pie, etc.)")
-    title: Optional[str] = Field(None, description="Título del gráfico")
+    """Datos extraídos de un gráfico o tabla"""
+    chart_type: str = Field(description="Tipo de visualización (barra, línea, pie, tabla, matriz, etc.)")
+    title: Optional[str] = Field(None, description="Título de la visualización")
+    description: Optional[str] = Field(None, description="Descripción de lo que muestra")
     categories: List[str] = Field(default_factory=list, description="Categorías o labels")
     series: List[Dict[str, Any]] = Field(default_factory=list, description="Series de datos")
     values: List[float] = Field(default_factory=list, description="Valores numéricos")
     insights: List[str] = Field(default_factory=list, description="Insights clave")
     metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas calculadas")
+
+
+class TextAnalysis(BaseModel):
+    """Análisis estructurado de texto con IA"""
+    key_metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas clave extraídas")
+    percentages: List[Dict[str, Any]] = Field(default_factory=list, description="Porcentajes con contexto")
+    dates: List[str] = Field(default_factory=list, description="Fechas mencionadas")
+    entities: Dict[str, List[str]] = Field(default_factory=dict, description="Entidades (empresas, productos, personas)")
+    insights: List[str] = Field(default_factory=list, description="Hallazgos principales")
+    keywords: List[str] = Field(default_factory=list, description="Palabras clave")
 
 
 class TextData(BaseModel):
@@ -22,6 +33,7 @@ class TextData(BaseModel):
     dates: List[str] = Field(default_factory=list, description="Fechas mencionadas")
     percentages: List[float] = Field(default_factory=list, description="Porcentajes encontrados")
     keywords: List[str] = Field(default_factory=list, description="Palabras clave")
+    ai_analysis: Optional[TextAnalysis] = Field(None, description="Análisis con IA (si está habilitado)")
 
 
 class ImageData(BaseModel):
@@ -49,4 +61,4 @@ class Config(BaseModel):
     """Configuración del sistema"""
     extraction: Dict[str, Any]
     analysis: Dict[str, Any]
-    prompts: Dict[str, str]
+    prompts: Dict[str, Any]
