@@ -6,7 +6,7 @@ from typing import List
 from pydantic_ai import Agent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
-from models import ChartData, ImageData, Config, TextData
+from models import ChartData, ImageData, Config, TextData, TextAnalysis
 
 
 class DocumentAnalyzer:
@@ -27,15 +27,79 @@ class DocumentAnalyzer:
         else:
             raise ValueError(f"Proveedor no soportado: {provider}. Use 'anthropic' o 'openai'")
         
-        # Crear agente
+        # Cargar y combinar prompts
+        system_prompt = self._load_combined_prompt('base_chart_analysis.md')
+        
+        # Crear agente para imágenes/charts
         self.chart_agent = Agent[None, ChartData](
             model=model,
-            # result_schema=ChartData,
             output_type=ChartData,
-            system_prompt=self.config.prompts['chart_analysis']
+            system_prompt=system_prompt
         )
         
+        # Crear agente para texto (si está habilitado)
+        self.text_analysis_enabled = self.config.analysis.get('analyze_text_with_ai', False)
+        if self.text_analysis_enabled:
+            text_prompt = self._load_combined_prompt('base_text_analysis.md')
+            self.text_agent = Agent[None, TextAnalysis](
+                model=model,
+                output_type=TextAnalysis,
+                system_prompt=text_prompt
+            )
+            print(f"  → Análisis de texto con IA: HABILITADO")
+        else:
+            self.text_agent = None
+            print(f"  → Análisis de texto con IA: deshabilitado (solo regex)")
+        
         print(f"✓ Agente inicializado con {provider.upper()}: {model_name}")
+    
+    def _load_combined_prompt(self, base_file: str = 'base_chart_analysis.md') -> str:
+        """
+        Carga y combina el prompt base con el contexto de dominio específico.
+        
+        Args:
+            base_file: Nombre del archivo de prompt base a cargar
+        
+        Estructura:
+        1. Prompt base (instrucciones generales de análisis)
+        2. Contexto de dominio (terminología, métricas específicas)
+        """
+        prompts_config = self.config.prompts
+        prompts_dir = Path(prompts_config.get('prompts_dir', 'prompts'))
+        
+        # Cargar prompt base
+        base_prompt_path = prompts_dir / base_file
+        
+        try:
+            with open(base_prompt_path, 'r', encoding='utf-8') as f:
+                base_prompt = f.read()
+        except FileNotFoundError:
+            print(f"  ⚠️  No se encontró {base_prompt_path}, usando prompt por defecto")
+            base_prompt = prompts_config.get('chart_analysis', 
+                'Analiza este gráfico en detalle. Extrae todos los valores numéricos, categorías y tendencias.')
+        
+        # Cargar contexto de dominio (opcional)
+        domain = prompts_config.get('domain')
+        domain_prompt = ""
+        
+        if domain:
+            domain_file = prompts_config.get('domain_prompts', {}).get(domain)
+            if domain_file:
+                domain_path = prompts_dir / 'domains' / domain_file
+                try:
+                    with open(domain_path, 'r', encoding='utf-8') as f:
+                        domain_prompt = f.read()
+                    print(f"  → Usando contexto de dominio: {domain}")
+                except FileNotFoundError:
+                    print(f"  ⚠️  No se encontró contexto para dominio '{domain}'")
+        
+        # Combinar prompts
+        if domain_prompt:
+            combined = f"{base_prompt}\n\n{'='*80}\n\n{domain_prompt}"
+        else:
+            combined = base_prompt
+        
+        return combined
     
     def _create_anthropic_model(self, model_name: str) -> AnthropicModel:
         """Crea modelo de Anthropic con manejo de API key"""
@@ -93,9 +157,21 @@ class DocumentAnalyzer:
         }
         media_type = mime_types.get(ext, 'image/png')
 
+        # Mensaje del usuario mejorado con instrucciones específicas
+        user_message = """Analiza este gráfico siguiendo las instrucciones del sistema.
+
+IMPORTANTE:
+1. Extrae TODOS los valores numéricos visibles con precisión
+2. Identifica TODAS las categorías y series
+3. Proporciona insights específicos basados en los datos
+4. Calcula métricas relevantes (promedios, totales, variaciones)
+5. Usa la terminología y contexto del dominio si aplica
+
+Devuelve la información en el formato JSON estructurado especificado."""
+
         # Analizar con el agente
         result = self.chart_agent.run_sync(
-            f"Analiza este gráfico y extrae toda la información relevante.",
+            user_message,
             message_history=[{
                 "role": "user",
                 "content": [
@@ -163,6 +239,43 @@ class DocumentAnalyzer:
             # Palabras clave simples (palabras en mayúsculas o números grandes)
             keywords = re.findall(r'\b[A-Z]{2,}\b|\b\d{1,3}(?:,\d{3})+\b', content)
             text.keywords = keywords[:10]  # Top 10
+        
+        return text_data
+    
+    def analyze_text_with_ai(self, text_data: List[TextData]) -> List[TextData]:
+        """
+        Analiza el texto extraído usando IA para obtener insights más profundos.
+        Requiere que analyze_text_with_ai esté habilitado en config.
+        """
+        if not self.text_analysis_enabled or not self.text_agent:
+            print("  ⚠️  Análisis de texto con IA no está habilitado")
+            return text_data
+        
+        print(f"  → Analizando {len(text_data)} páginas de texto con IA...")
+        
+        for text in text_data:
+            try:
+                # Solo analizar si hay contenido sustancial
+                if len(text.content.strip()) < 50:
+                    continue
+                
+                result = self.text_agent.run_sync(
+                    f"Analiza el siguiente texto y extrae métricas, entidades e insights clave:\n\n{text.content[:4000]}"
+                )
+                
+                # Extraer el resultado estructurado
+                if isinstance(result, TextAnalysis):
+                    text.ai_analysis = result
+                elif hasattr(result, 'output') and isinstance(result.output, TextAnalysis):
+                    text.ai_analysis = result.output
+                elif hasattr(result, 'data') and isinstance(result.data, TextAnalysis):
+                    text.ai_analysis = result.data
+                    
+            except Exception as e:
+                print(f"  ⚠️  Error analizando página {text.page_number}: {e}")
+        
+        analyzed_count = sum(1 for t in text_data if t.ai_analysis is not None)
+        print(f"  ✓ {analyzed_count} páginas analizadas con IA")
         
         return text_data
 

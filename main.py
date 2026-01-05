@@ -28,16 +28,20 @@ def process_document(file_path: str, config_path: str = "config.json") -> Docume
     print("\n🔍 Analizando contenido...")
     analyzer = DocumentAnalyzer(config_path)
     
-    # Extraer métricas del texto
+    # Extraer métricas del texto (regex básico)
     text_data = analyzer.extract_text_metrics(text_data)
-    print(f"   ✓ Métricas extraídas del texto")
+    print(f"   ✓ Métricas extraídas del texto (regex)")
+    
+    # Análisis de texto con IA (si está habilitado)
+    if analyzer.text_analysis_enabled:
+        text_data = analyzer.analyze_text_with_ai(text_data)
     
     # Analizar imágenes
     chart_analysis = []
     if image_data:
-        print(f"   → Analizando {len(image_data)} gráficos con IA...")
+        print(f"   → Analizando {len(image_data)} gráficos/tablas con IA...")
         chart_analysis = analyzer.analyze_all_images(image_data)
-        print(f"   ✓ {len(chart_analysis)} gráficos analizados")
+        print(f"   ✓ {len(chart_analysis)} visualizaciones analizadas")
     
     # Paso 3: Crear análisis completo
     analysis = DocumentAnalysis(

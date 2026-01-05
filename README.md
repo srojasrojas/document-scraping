@@ -1,12 +1,15 @@
 # Procesador de Documentos PDF/PPT
 
-Sistema modular para extraer y analizar contenido de documentos PDF y PowerPoint usando Pydantic y Claude AI.
+Sistema modular para extraer y analizar contenido de documentos PDF y PowerPoint usando IA (Claude/OpenAI) con filtrado inteligente de imágenes y prompts especializados por dominio.
 
 ## 🚀 Características
 
 - ✅ Extracción de texto de PDF y PPTX
 - ✅ Extracción de imágenes y gráficos
-- ✅ Análisis de gráficos con Claude AI usando Pydantic-AI
+- ✅ **Filtrado inteligente de imágenes con OCR** (descarta decoraciones sin valor)
+- ✅ Análisis de gráficos con IA usando Pydantic-AI (Claude o OpenAI)
+- ✅ **Sistema de prompts modular** (base + contexto de dominio)
+- ✅ **Contextos especializados** (AFP Chile, genérico empresarial, extensible)
 - ✅ Identificación automática de métricas y porcentajes
 - ✅ Configuración externalizada en JSON
 - ✅ Código simple y agnóstico
@@ -17,13 +20,78 @@ Sistema modular para extraer y analizar contenido de documentos PDF y PowerPoint
 pip install -r requirements.txt
 ```
 
+### Requisito adicional: Tesseract OCR
+
+Para el filtrado de imágenes, instala Tesseract:
+
+**Windows:**
+```powershell
+# Con chocolatey
+choco install tesseract
+
+# O descargar desde: https://github.com/UB-Mannheim/tesseract/wiki
+```
+
+**macOS:**
+```bash
+brew install tesseract
+```
+
+**Linux:**
+```bash
+sudo apt-get install tesseract-ocr
+```
+
 ## 🔧 Configuración
 
-Edita `config.json` para personalizar:
+### API Keys
 
-- **Directorios de salida**: Dónde se guardan imágenes, texto y datos
-- **Parámetros de análisis**: Modelo de Claude, temperatura, tokens
-- **Prompts**: Instrucciones para el análisis de gráficos
+**Opción 1 (Recomendada)** - Variables de entorno:
+```bash
+export ANTHROPIC_API_KEY='tu-key'
+export OPENAI_API_KEY='tu-key'
+```
+
+**Opción 2** - En `config.json`:
+```json
+{
+  "analysis": {
+    "provider": "openai",
+    "anthropic_api_key": "tu-key",
+    "openai_api_key": "tu-key"
+  }
+}
+```
+
+### Seleccionar Dominio
+
+Edita `config.json` para especificar el contexto empresarial:
+
+```json
+{
+  "prompts": {
+    "domain": "afp_chile"  // o "generic" para empresas generales
+  }
+}
+```
+
+Dominios disponibles:
+- **`afp_chile`**: Administradoras de Fondos de Pensiones chilenas
+- **`generic`**: Empresas y reportes corporativos generales
+- **`null`**: Sin contexto específico (solo análisis base)
+
+### Agregar Nuevo Dominio
+
+1. Crea `prompts/domains/mi_empresa.md` con contexto especializado
+2. Regístralo en `config.json`:
+   ```json
+   "domain_prompts": {
+     "mi_empresa": "mi_empresa.md"
+   }
+   ```
+3. Actívalo: `"domain": "mi_empresa"`
+
+Ver [prompts/README.md](prompts/README.md) para más detalles.
 
 ## 📖 Uso
 
@@ -46,8 +114,15 @@ python main.py documento.pptx --config mi_config.json
 ├── config.json          # Configuración del sistema
 ├── models.py            # Modelos Pydantic
 ├── extractor.py         # Extracción de PDF/PPT
-├── analyzer.py          # Análisis con Claude
+├── image_filter.py      # Filtrado de imágenes con OCR
+├── analyzer.py          # Análisis con IA
 ├── main.py              # Script principal
+├── prompts/             # Sistema de prompts modular
+│   ├── README.md        # Documentación de prompts
+│   ├── base_chart_analysis.md    # Instrucciones base
+│   └── domains/         # Contextos especializados
+│       ├── afp_chile.md # Contexto AFP Chile
+│       └── generic.md   # Contexto empresarial
 ├── requirements.txt     # Dependencias
 └── output/              # Directorio de salida
     ├── images/          # Imágenes extraídas

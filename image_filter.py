@@ -5,6 +5,8 @@ información valiosa para análisis.
 """
 
 import json
+import os
+import platform
 from pathlib import Path
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ class OCRResult:
     char_count: int
     digit_count: int
     word_count: int
+    useful_word_count: int  # Palabras excluyendo las ignoradas
     has_numbers: bool
     confidence_score: float
 
@@ -45,11 +48,21 @@ class ImageFilter:
         # Obtener configuración de filtrado (con valores por defecto)
         filter_config = self.config.extraction.get('image_filter', {})
         
+        # Configurar ruta de Tesseract
+        self._setup_tesseract(filter_config)
+        
         # Umbral mínimo de caracteres para considerar texto significativo
         self.min_chars = filter_config.get('min_chars', 10)
         
         # Umbral mínimo de dígitos (los gráficos suelen tener números)
         self.min_digits = filter_config.get('min_digits', 2)
+        
+        # Mínimo de palabras (logos tienen pocas palabras)
+        self.min_words = filter_config.get('min_words', 5)
+        
+        # Densidad mínima de texto (caracteres por 10000 px²)
+        # Logos tienen baja densidad, tablas/gráficos tienen alta densidad
+        self.min_text_density = filter_config.get('min_text_density', 5)
         
         # Tamaño mínimo en píxeles (ancho o alto)
         self.min_dimension = filter_config.get('min_dimension', 100)
@@ -60,6 +73,16 @@ class ImageFilter:
         # Si tiene números, reducir el umbral de caracteres
         self.chars_with_numbers_multiplier = filter_config.get('chars_with_numbers_multiplier', 0.5)
         
+        # Requerir números para considerar imagen valiosa (estricto)
+        self.require_numbers = filter_config.get('require_numbers', False)
+        
+        # Palabras a ignorar (nombres de empresas, eslóganes) - no cuentan para el mínimo
+        self.ignore_words = set(w.lower() for w in filter_config.get('ignore_words', [
+            'afp', 'habitat', 'cuprum', 'capital', 'provida', 'planvital', 'modelo', 'uno',
+            'seguridad', 'confianza', 'compañía', 'principal', 'una', 'logo', 'marca',
+            'chile', 'www', 'com', 'cl', 'http', 'https'
+        ]))
+        
         # Idiomas para OCR (español e inglés por defecto)
         self.ocr_lang = filter_config.get('ocr_lang', 'spa+eng')
         
@@ -68,9 +91,45 @@ class ImageFilter:
         
         print(f"✓ Filtro de imágenes inicializado")
         print(f"  → Mínimo caracteres: {self.min_chars}")
+        print(f"  → Mínimo palabras: {self.min_words}")
         print(f"  → Mínimo dígitos: {self.min_digits}")
+        print(f"  → Densidad mínima: {self.min_text_density} chars/10Kpx²")
         print(f"  → Dimensión mínima: {self.min_dimension}px")
         print(f"  → Área mínima: {self.min_area}px²")
+        if self.require_numbers:
+            print(f"  → Requiere números: SÍ")
+    
+    def _setup_tesseract(self, filter_config: dict):
+        """
+        Configura la ruta del ejecutable de Tesseract.
+        Intenta detección automática en Windows si no está configurado.
+        """
+        # Verificar si hay una ruta configurada
+        tesseract_cmd = filter_config.get('tesseract_cmd')
+        
+        if tesseract_cmd and Path(tesseract_cmd).exists():
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+            print(f"  → Tesseract: {tesseract_cmd}")
+            return
+        
+        # Detectar automáticamente en Windows
+        if platform.system() == 'Windows':
+            possible_paths = [
+                r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+                r'C:\Tesseract-OCR\tesseract.exe',
+                os.path.expanduser(r'~\AppData\Local\Programs\Tesseract-OCR\tesseract.exe'),
+            ]
+            
+            for path in possible_paths:
+                if Path(path).exists():
+                    pytesseract.pytesseract.tesseract_cmd = path
+                    print(f"  → Tesseract detectado: {path}")
+                    return
+        
+        # Si no se encontró, intentar usar el PATH del sistema
+        print(f"  → Tesseract: usando PATH del sistema")
+        print(f"     Si hay errores, configura 'tesseract_cmd' en config.json")
     
     def analyze_image_ocr(self, image_path: str) -> OCRResult:
         """
@@ -109,6 +168,11 @@ class ImageFilter:
             word_count = len(text_parts)
             has_numbers = digit_count > 0
             
+            # Contar palabras útiles (excluyendo las ignoradas y palabras muy cortas)
+            useful_words = [w for w in text_parts 
+                           if len(w) > 2 and w.lower() not in self.ignore_words]
+            useful_word_count = len(useful_words)
+            
             # Calcular confianza promedio
             avg_confidence = sum(confidences) / len(confidences) if confidences else 0
             
@@ -117,6 +181,7 @@ class ImageFilter:
                 char_count=char_count,
                 digit_count=digit_count,
                 word_count=word_count,
+                useful_word_count=useful_word_count,
                 has_numbers=has_numbers,
                 confidence_score=avg_confidence
             )
@@ -129,6 +194,7 @@ class ImageFilter:
                 char_count=0,
                 digit_count=0,
                 word_count=0,
+                useful_word_count=0,
                 has_numbers=False,
                 confidence_score=0
             )
@@ -158,6 +224,11 @@ class ImageFilter:
         """
         Determina si una imagen contiene información valiosa para análisis.
         
+        Criterios más estrictos para filtrar logos y banners:
+        1. Debe tener suficientes números (gráficos/tablas siempre tienen datos)
+        2. O tener alta densidad de texto (muchas palabras útiles por área)
+        3. Las palabras de marca/empresa no cuentan
+        
         Retorna:
             - (True/False, razón, resultado_ocr)
         """
@@ -169,21 +240,49 @@ class ImageFilter:
         # Paso 2: Realizar OCR
         ocr_result = self.analyze_image_ocr(image_data.path)
         
-        # Paso 3: Evaluar contenido
-        # Caso especial: si tiene suficientes números, probablemente es un gráfico
-        if ocr_result.digit_count >= self.min_digits:
-            # Con números, reducimos el umbral de caracteres
-            adjusted_min_chars = int(self.min_chars * self.chars_with_numbers_multiplier)
-            if ocr_result.char_count >= adjusted_min_chars:
-                return True, f"Gráfico/datos ({ocr_result.digit_count} números, {ocr_result.char_count} chars)", ocr_result
+        # Calcular área y densidad de texto
+        area = image_data.width * image_data.height
+        text_density = (ocr_result.char_count * 10000) / area if area > 0 else 0
         
-        # Caso general: verificar cantidad de texto
-        if ocr_result.char_count >= self.min_chars:
-            return True, f"Texto suficiente ({ocr_result.char_count} chars)", ocr_result
+        # Paso 3: Evaluar contenido con criterios más estrictos
         
-        # No cumple criterios
-        reason = f"Poco contenido ({ocr_result.char_count} chars, {ocr_result.digit_count} números)"
-        return False, reason, ocr_result
+        # Criterio A: Tiene suficientes números (esencial para gráficos/tablas)
+        has_good_numbers = ocr_result.digit_count >= self.min_digits
+        
+        # Criterio B: Tiene suficientes palabras útiles (no son solo nombres de empresa)
+        has_enough_words = ocr_result.useful_word_count >= self.min_words
+        
+        # Criterio C: Tiene buena densidad de texto (no es un logo con mucho espacio vacío)
+        has_good_density = text_density >= self.min_text_density
+        
+        # Lógica de decisión:
+        
+        # Si require_numbers está activo, es obligatorio tener números
+        if self.require_numbers and not has_good_numbers:
+            return False, f"Sin números ({ocr_result.digit_count} dígitos)", ocr_result
+        
+        # Caso ideal: tiene números Y buena densidad -> probablemente gráfico/tabla
+        if has_good_numbers and has_good_density:
+            return True, f"Gráfico/tabla ({ocr_result.digit_count} núms, densidad={text_density:.1f})", ocr_result
+        
+        # Caso secundario: muchas palabras útiles Y buena densidad -> probablemente contenido textual valioso
+        if has_enough_words and has_good_density:
+            return True, f"Contenido denso ({ocr_result.useful_word_count} palabras, densidad={text_density:.1f})", ocr_result
+        
+        # Caso con números pero baja densidad: aún podría ser útil si hay suficientes
+        if ocr_result.digit_count >= self.min_digits * 2:  # El doble del mínimo
+            return True, f"Datos numéricos ({ocr_result.digit_count} números)", ocr_result
+        
+        # No cumple criterios - probablemente logo/banner
+        reasons = []
+        if not has_good_numbers:
+            reasons.append(f"{ocr_result.digit_count} núms")
+        if not has_enough_words:
+            reasons.append(f"{ocr_result.useful_word_count} palabras útiles")
+        if not has_good_density:
+            reasons.append(f"densidad={text_density:.1f}")
+        
+        return False, f"Probable logo/banner ({', '.join(reasons)})", ocr_result
     
     def filter_images(self, images: List[ImageData]) -> Tuple[List[ImageData], List[ImageData]]:
         """
