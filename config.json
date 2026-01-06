@@ -4,7 +4,7 @@
     "images_dir": "images",
     "text_dir": "text",
     "data_dir": "data",
-    "supported_formats": [".pdf", ".ppt", ".pptx"],
+    "supported_formats": [".pdf"],
     "image_dpi": 200,
     "image_format": "png",
     "image_filter": {
