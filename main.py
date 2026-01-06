@@ -6,7 +6,7 @@ from analyzer import DocumentAnalyzer
 from models import DocumentAnalysis
 
 
-def process_document(file_path: str, config_path: str = "config.json") -> DocumentAnalysis:
+def process_document(file_path: str, config_path: str = "config.json", domain_prompts_file: str = None) -> DocumentAnalysis:
     """
     Procesa un documento completo:
     1. Extrae texto e imágenes
@@ -26,7 +26,7 @@ def process_document(file_path: str, config_path: str = "config.json") -> Docume
     
     # Paso 2: Análisis
     print("\n🔍 Analizando contenido...")
-    analyzer = DocumentAnalyzer(config_path)
+    analyzer = DocumentAnalyzer(config_path, domain_prompts_file=domain_prompts_file)
     
     # Extraer métricas del texto (regex básico)
     text_data = analyzer.extract_text_metrics(text_data)
@@ -103,11 +103,14 @@ Configuración de API Keys:
     }
 
 Ejemplos:
-  # Usar con Claude (Anthropic)
+  # Uso básico (prompts genéricos)
   python main.py documento.pdf
   
-  # Cambiar a OpenAI (modifica config.json primero)
-  python main.py documento.pdf --config config_openai.json
+  # Con prompts específicos de dominio
+  python main.py documento.pdf --domain-prompts afp_chile
+  
+  # Con configuración personalizada
+  python main.py documento.pdf --config config_custom.json --domain-prompts afp_chile
         """
     )
     parser.add_argument(
@@ -118,6 +121,11 @@ Ejemplos:
         "--config",
         default="config.json",
         help="Ruta al archivo de configuración (default: config.json)"
+    )
+    parser.add_argument(
+        "--domain-prompts",
+        dest="domain_prompts",
+        help="Nombre del archivo de prompts específicos del dominio (ej: afp_chile). Se busca en prompts/domains/"
     )
     
     args = parser.parse_args()
@@ -133,7 +141,7 @@ Ejemplos:
         return
     
     try:
-        analysis = process_document(args.file, args.config)
+        analysis = process_document(args.file, args.config, domain_prompts_file=args.domain_prompts)
         print(f"\n✅ Proceso completado exitosamente")
     except Exception as e:
         print(f"\n❌ Error durante el procesamiento: {e}")

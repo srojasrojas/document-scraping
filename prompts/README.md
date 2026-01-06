@@ -1,116 +1,77 @@
 # Sistema de Prompts Modular
 
-Este directorio contiene los prompts que guían el análisis de gráficos con IA, separados en dos niveles:
+Este directorio contiene los prompts que guían el análisis de gráficos con IA, organizados en dos niveles: instrucciones base (genéricas) y contextos de dominio (especializados).
 
-## Estructura
+## 🗂️ Estructura
 
 ```
 prompts/
 ├── base_chart_analysis.md      # Prompt base (genérico, para cualquier gráfico)
-├── domains/                     # Contextos específicos por dominio/empresa
-│   ├── afp_chile.md            # Contexto para AFPs chilenas
-│   ├── generic.md              # Contexto empresarial genérico
-│   └── [otros dominios...]     # Agregar según necesidad
-└── README.md                    # Este archivo
+├── base_text_analysis.md       # Análisis de texto (opcional)
+├── domains/                     # Contextos específicos por sector/empresa
+│   ├── afp_chile.md            # Sector AFP Chile
+│   └── [tu_dominio].md         # Tus contextos personalizados
+└── README.md                    # Esta guía
 ```
 
-## Cómo Funciona
+## 🔄 Cómo Funciona
 
-### 1. Prompt Base (`base_chart_analysis.md`)
-**Propósito**: Instrucciones generales de análisis aplicables a cualquier gráfico
+### Nivel 1: Prompt Base (`base_chart_analysis.md`)
+
+**Propósito**: Instrucciones universales de análisis aplicables a cualquier gráfico
 
 **Contiene**:
 - Metodología de análisis paso a paso
-- Formato de respuesta estructurado (JSON)
+- Formato de respuesta estructurado (JSON/Pydantic)
 - Principios de precisión y completitud
 - Manejo de casos especiales
 
 **Cuándo modificar**: 
-- Cambiar estructura de salida (schema)
-- Ajustar metodología de análisis
-- Mejorar instrucciones generales
+- Cambiar estructura de salida (modelo Pydantic)
+- Ajustar metodología general de análisis
+- Mejorar instrucciones universales
 
-### 2. Contexto de Dominio (`domains/*.md`)
+### Nivel 2: Contexto de Dominio (`domains/*.md`)
+
 **Propósito**: Conocimiento específico del negocio/industria
 
 **Contiene**:
-- Terminología especializada
-- Métricas relevantes del sector
+- Terminología especializada del sector
+- Métricas relevantes y sus fórmulas
 - Convenciones de presentación
 - Ejemplos de interpretación contextualizada
 - Glosarios y referencias
 
-**Cuándo modificar**:
-- Analizar documentos de una nueva empresa/sector
-- Actualizar terminología del dominio
-- Agregar nuevas métricas relevantes
+**Cuándo crear uno nuevo**:
+- Analizar documentos de un nuevo sector/empresa
+- Necesitas terminología específica
+- Requieres interpretación contextualizada de métricas
 
-## Configuración en `config.json`
+## 📝 Uso del Sistema
 
-```json
-{
-  "prompts": {
-    "prompts_dir": "prompts",
-    "base_prompt": "base_chart_analysis.md",
-    "domain": "afp_chile",  // Cambiar según el caso
-    "domain_prompts": {
-      "afp_chile": "afp_chile.md",
-      "generic": "generic.md"
-      // Agregar más dominios aquí
-    }
-  }
-}
+### Modo 1: Análisis Genérico (sin dominio)
+
+```bash
+python main.py documento.pdf
 ```
 
-## Cómo Agregar un Nuevo Dominio
+**El modelo recibe**:
+- ✅ Prompt base (`base_chart_analysis.md`)
+- ❌ Sin contexto específico
 
-### Paso 1: Crear archivo de contexto
-Crea `prompts/domains/mi_empresa.md` con:
-- Contexto del negocio
-- Terminología clave
-- Métricas relevantes
-- Tipos de análisis comunes
-- Ejemplos específicos
+**Ideal para**: Documentos de sectores diversos o análisis exploratorio
 
-### Paso 2: Registrar en config.json
-```json
-"domain_prompts": {
-  "afp_chile": "afp_chile.md",
-  "generic": "generic.md",
-  "mi_empresa": "mi_empresa.md"  // Agregar aquí
-}
+### Modo 2: Análisis Especializado (con dominio)
+
+```bash
+python main.py informe_afp.pdf --domain-prompts afp_chile
 ```
 
-### Paso 3: Activar en config.json
-```json
-"domain": "mi_empresa"  // Cambiar aquí
-```
+**El modelo recibe**:
+- ✅ Prompt base (`base_chart_analysis.md`)
+- ✅ Contexto de dominio (`domains/afp_chile.md`)
 
-## Ejemplo de Uso
-
-### Para AFP Chilena (actual)
-```json
-"domain": "afp_chile"
-```
-El agente recibirá:
-- ✓ Instrucciones base de análisis
-- ✓ Contexto de AFPs (fondos A-E, rentabilidad, etc.)
-
-### Para Empresa Genérica
-```json
-"domain": "generic"
-```
-El agente recibirá:
-- ✓ Instrucciones base de análisis
-- ✓ Contexto empresarial general (KPIs, finanzas, etc.)
-
-### Sin Contexto de Dominio
-```json
-"domain": null
-```
-El agente recibirá:
-- ✓ Solo instrucciones base de análisis
-- ✗ Sin contexto especializado
+**Ideal para**: Documentos de un sector específico con terminología técnica
 
 ## Mejores Prácticas
 
@@ -172,14 +133,26 @@ El agente recibirá:
 ## Troubleshooting
 
 **Problema**: Agente genera análisis incorrectos
-- ✓ Verificar que el dominio correcto esté seleccionado
+- ✓ Verificar que estás usando `--domain-prompts` correctamente
 - ✓ Revisar si la terminología del contexto está actualizada
 - ✓ Agregar ejemplos específicos en el archivo de dominio
 
 **Problema**: Agente ignora formato de salida
 - ✓ Revisar que `base_chart_analysis.md` tenga instrucciones claras
-- ✓ Verificar que el schema de salida (ChartData) coincida con las instrucciones
+- ✓ Verificar que el schema de salida (ChartData en `models.py`) coincida
 
 **Problema**: Análisis demasiado genérico
-- ✓ Asegurar que `domain` no sea `null` en config.json
-- ✓ Enriquecer el archivo de dominio con más contexto específico
+- ✓ Asegurar que usas `--domain-prompts` en el comando CLI
+- ✓ Enriquecer el archivo de dominio con más contexto y ejemplos
+
+**Problema**: Dominio no se carga
+- ✓ Verificar que el archivo existe en `prompts/domains/`
+- ✓ El nombre debe ser exacto (case-sensitive)
+- ✓ La extensión `.md` es opcional en CLI: `--domain-prompts afp_chile`
+
+## 🚀 Guía Rápida: Crear Tu Primer Dominio
+
+1. **Crea** `prompts/domains/mi_sector.md`
+2. **Copia** la plantilla de arriba y completa con tu información
+3. **Usa**: `python main.py doc.pdf --domain-prompts mi_sector`
+4. **Itera**: Revisa resultados y mejora el contexto

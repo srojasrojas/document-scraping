@@ -1,23 +1,37 @@
 import json
 import os
-import base64
 from pathlib import Path
 from typing import List
-from pydantic_ai import Agent
+from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from models import ChartData, ImageData, Config, TextData, TextAnalysis
 
 
 class DocumentAnalyzer:
-    def __init__(self, config_path: str = "config.json"):
+    # Modelos válidos conocidos por proveedor
+    VALID_MODELS = {
+        'anthropic': ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307',
+                      'claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620'],
+        'openai': ['gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo',
+                   'gpt-4-vision-preview', 'gpt-4-turbo-preview']
+    }
+    
+    def __init__(self, config_path: str = "config.json", domain_prompts_file: str = None):
         with open(config_path, 'r') as f:
             config_data = json.load(f)
         self.config = Config(**config_data)
+        self.domain_prompts_file = domain_prompts_file
         
         # Obtener configuración del proveedor
         provider = self.config.analysis.get('provider', 'anthropic').lower()
         model_name = self.config.analysis['model']
+        
+        # Advertir si el modelo no está en la lista conocida
+        if provider in self.VALID_MODELS and model_name not in self.VALID_MODELS[provider]:
+            print(f"  ⚠️  ADVERTENCIA: '{model_name}' no está en la lista de modelos conocidos de {provider.upper()}")
+            print(f"  ⚠️  Modelos válidos: {', '.join(self.VALID_MODELS[provider])}")
+            print(f"  ⚠️  El modelo puede funcionar si es interno/beta, pero verifica si hay errores.")
         
         # Crear modelo según el proveedor
         if provider == 'anthropic':
@@ -51,6 +65,9 @@ class DocumentAnalyzer:
             self.text_agent = None
             print(f"  → Análisis de texto con IA: deshabilitado (solo regex)")
         
+        # Modo verbose para logging detallado
+        self.verbose = self.config.analysis.get('verbose', True)
+        
         print(f"✓ Agente inicializado con {provider.upper()}: {model_name}")
     
     def _load_combined_prompt(self, base_file: str = 'base_chart_analysis.md') -> str:
@@ -67,7 +84,6 @@ class DocumentAnalyzer:
         prompts_config = self.config.prompts
         prompts_dir = Path(prompts_config.get('prompts_dir', 'prompts'))
         
-        # Cargar prompt base
         base_prompt_path = prompts_dir / base_file
         
         try:
@@ -78,20 +94,17 @@ class DocumentAnalyzer:
             base_prompt = prompts_config.get('chart_analysis', 
                 'Analiza este gráfico en detalle. Extrae todos los valores numéricos, categorías y tendencias.')
         
-        # Cargar contexto de dominio (opcional)
-        domain = prompts_config.get('domain')
         domain_prompt = ""
         
-        if domain:
-            domain_file = prompts_config.get('domain_prompts', {}).get(domain)
-            if domain_file:
-                domain_path = prompts_dir / 'domains' / domain_file
-                try:
-                    with open(domain_path, 'r', encoding='utf-8') as f:
-                        domain_prompt = f.read()
-                    print(f"  → Usando contexto de dominio: {domain}")
-                except FileNotFoundError:
-                    print(f"  ⚠️  No se encontró contexto para dominio '{domain}'")
+        if self.domain_prompts_file:
+            domain_file = self.domain_prompts_file if self.domain_prompts_file.endswith('.md') else f"{self.domain_prompts_file}.md"
+            domain_path = prompts_dir / 'domains' / domain_file
+            try:
+                with open(domain_path, 'r', encoding='utf-8') as f:
+                    domain_prompt = f.read()
+                print(f"  → Usando contexto de dominio: {self.domain_prompts_file}")
+            except FileNotFoundError:
+                print(f"  ⚠️  No se encontró {domain_path}")
         
         # Combinar prompts
         if domain_prompt:
@@ -142,11 +155,10 @@ class DocumentAnalyzer:
         return OpenAIChatModel(model_name)
     
     def analyze_image(self, image_path: str) -> ChartData:
-        """Analiza una imagen (gráfico) usando el modelo configurado"""
+        """Analiza una imagen (gráfico/tabla) usando el modelo configurado"""
         with open(image_path, 'rb') as f:
-            image_data = base64.b64encode(f.read()).decode('utf-8')
+            image_bytes = f.read()
 
-        # Determinar el tipo MIME
         ext = Path(image_path).suffix.lower()
         mime_types = {
             '.png': 'image/png',
@@ -157,8 +169,7 @@ class DocumentAnalyzer:
         }
         media_type = mime_types.get(ext, 'image/png')
 
-        # Mensaje del usuario mejorado con instrucciones específicas
-        user_message = """Analiza este gráfico siguiendo las instrucciones del sistema.
+        user_prompt = """Analiza este gráfico/tabla siguiendo las instrucciones del sistema.
 
 IMPORTANTE:
 1. Extrae TODOS los valores numéricos visibles con precisión
@@ -169,25 +180,17 @@ IMPORTANTE:
 
 Devuelve la información en el formato JSON estructurado especificado."""
 
-        # Analizar con el agente
-        result = self.chart_agent.run_sync(
-            user_message,
-            message_history=[{
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": image_data
-                        }
-                    }
-                ]
-            }]
-        )
+        image_content = BinaryContent(data=image_bytes, media_type=media_type)
+        
+        if self.verbose:
+            print(f"  → Enviando imagen ({len(image_bytes)} bytes, {media_type})")
 
-        # Extraer el resultado estructurado
+        try:
+            result = self.chart_agent.run_sync([user_prompt, image_content])
+        except Exception as e:
+            print(f"  ❌ Error al analizar imagen: {e}")
+            raise
+
         if isinstance(result, ChartData):
             return result
         elif hasattr(result, 'output') and isinstance(result.output, ChartData):
@@ -195,9 +198,7 @@ Devuelve la información en el formato JSON estructurado especificado."""
         elif hasattr(result, 'data') and isinstance(result.data, ChartData):
             return result.data
         else:
-            # Si no es ChartData, intentar parsear el texto como última opción
             print(f"  ⚠️  Resultado no estructurado: {type(result)}")
-            # Devolver un ChartData vacío o con error
             return ChartData(
                 chart_type="unknown",
                 title="Error: No se pudo analizar",

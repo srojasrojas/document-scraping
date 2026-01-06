@@ -1,0 +1,41 @@
+{
+  "extraction": {
+    "output_dir": "output",
+    "images_dir": "images",
+    "text_dir": "text",
+    "data_dir": "data",
+    "supported_formats": [".pdf", ".ppt", ".pptx"],
+    "image_dpi": 200,
+    "image_format": "png",
+    "image_filter": {
+      "enabled": true,
+      "min_chars": 15,
+      "min_digits": 3,
+      "min_words": 5,
+      "min_text_density": 8,
+      "min_dimension": 100,
+      "min_area": 10000,
+      "chars_with_numbers_multiplier": 0.5,
+      "require_numbers": false,
+      "ignore_words": [
+        "uno", "derechos", "reservados"
+      ],
+      "ocr_lang": "spa+eng",
+      "verbose": true,
+      "tesseract_cmd": null
+    }
+  },
+  "analysis": {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "analyze_text_with_ai": false,
+    "anthropic_api_key": null,
+    "openai_api_key": null
+  },
+  "prompts": {
+    "prompts_dir": "prompts",
+    "base_prompt": "base_chart_analysis.md",
+    "chart_analysis": "Analiza este gráfico en detalle. Extrae todos los valores numéricos, categorías, tendencias y métricas clave. Estructura la información de forma clara y precisa.",
+    "text_extraction": "Extrae la información estructurada de este texto, identificando métricas clave, porcentajes, fechas y conceptos importantes."
+  }
+}
