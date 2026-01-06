@@ -4,8 +4,8 @@
 # Backup files
 BACKUP*
 
-# Cookies and config files
-config.json
+# Cookies and private files
+private*
 
 # Temporary input and output files
 tmp/
@@ -14,6 +14,7 @@ output/
 *.pkl
 *.pdf
 *.ppt
+*.pptx
 __pycache__/
 
 # Virtual environment
