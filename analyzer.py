@@ -5,7 +5,7 @@ from typing import List
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
-from models import ChartData, ImageData, Config, TextData, TextAnalysis
+from models import ChartData, ChartResource, ChartAnalysisResult, ImageData, Config, TextData, TextAnalysis
 
 
 class DocumentAnalyzer:
@@ -44,10 +44,10 @@ class DocumentAnalyzer:
         # Cargar y combinar prompts
         system_prompt = self._load_combined_prompt('base_chart_analysis.md')
         
-        # Crear agente para imágenes/charts
-        self.chart_agent = Agent[None, ChartData](
+        # Crear agente para imágenes/charts (usa ChartAnalysisResult sin info de recurso)
+        self.chart_agent = Agent[None, ChartAnalysisResult](
             model=model,
-            output_type=ChartData,
+            output_type=ChartAnalysisResult,
             system_prompt=system_prompt
         )
         
@@ -154,8 +154,9 @@ class DocumentAnalyzer:
 
         return OpenAIChatModel(model_name)
     
-    def analyze_image(self, image_path: str) -> ChartData:
+    def analyze_image(self, image_data: ImageData) -> ChartData:
         """Analiza una imagen (gráfico/tabla) usando el modelo configurado"""
+        image_path = image_data.path
         with open(image_path, 'rb') as f:
             image_bytes = f.read()
 
@@ -191,19 +192,40 @@ Devuelve la información en el formato JSON estructurado especificado."""
             print(f"  ❌ Error al analizar imagen: {e}")
             raise
 
-        if isinstance(result, ChartData):
-            return result
-        elif hasattr(result, 'output') and isinstance(result.output, ChartData):
-            return result.output
-        elif hasattr(result, 'data') and isinstance(result.data, ChartData):
-            return result.data
+        analysis_result = None
+        if isinstance(result, ChartAnalysisResult):
+            analysis_result = result
+        elif hasattr(result, 'output') and isinstance(result.output, ChartAnalysisResult):
+            analysis_result = result.output
+        elif hasattr(result, 'data') and isinstance(result.data, ChartAnalysisResult):
+            analysis_result = result.data
         else:
             print(f"  ⚠️  Resultado no estructurado: {type(result)}")
             return ChartData(
-                chart_type="unknown",
+                chart_data=ChartResource(
+                    type="unknown",
+                    resource=image_data.path,
+                    resource_type="image"
+                ),
                 title="Error: No se pudo analizar",
                 description=str(result)[:200] if hasattr(result, '__str__') else "Error desconocido"
             )
+        
+        # Convertir ChartAnalysisResult a ChartData agregando información del recurso
+        return ChartData(
+            chart_data=ChartResource(
+                type=analysis_result.chart_type,
+                resource=image_data.path,
+                resource_type="image"
+            ),
+            title=analysis_result.title,
+            description=analysis_result.description,
+            categories=analysis_result.categories,
+            series=analysis_result.series,
+            values=analysis_result.values,
+            insights=analysis_result.insights,
+            metrics=analysis_result.metrics
+        )
         
     def analyze_all_images(self, images: List[ImageData]) -> List[ChartData]:
         """Analiza todas las imágenes extraídas"""
@@ -211,9 +233,9 @@ Devuelve la información en el formato JSON estructurado especificado."""
         for img in images:
             try:
                 print(f"Analizando {img.filename}...")
-                chart_data = self.analyze_image(img.path)
+                chart_data = self.analyze_image(img)
                 # Solo agregar si es un ChartData válido
-                if isinstance(chart_data, ChartData) and chart_data.chart_type != "unknown":
+                if isinstance(chart_data, ChartData) and chart_data.chart_data.type != "unknown":
                     results.append(chart_data)
                 else:
                     print(f"  ⚠️  Análisis fallido para {img.filename}")

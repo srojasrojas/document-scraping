@@ -6,6 +6,40 @@ from analyzer import DocumentAnalyzer
 from models import DocumentAnalysis
 
 
+def create_insights_summary(analysis: DocumentAnalysis, output_file: Path) -> Path:
+    """
+    Crea un resumen breve de insights en formato Markdown.
+    Máximo 4 insights por gráfico analizado.
+    """
+    insights_file = output_file.parent / f"insights-{output_file.stem.replace('_analysis', '')}.md"
+    
+    content = f"# Insights - {analysis.filename}\n\n"
+    content += f"**Fecha de análisis**: {analysis.extraction_date.strftime('%Y-%m-%d %H:%M')}\n\n"
+    content += f"**Total páginas**: {analysis.total_pages} | **Gráficos analizados**: {len(analysis.chart_analysis)}\n\n"
+    content += "---\n\n"
+    
+    has_insights = False
+    
+    for chart_idx, chart in enumerate(analysis.chart_analysis, 1):
+        if chart.insights:
+            has_insights = True
+            content += f"## {chart_idx}. {chart.title or 'Sin título'} ({chart.chart_data.type})\n\n"
+            
+            # Máximo 4 insights por gráfico
+            top_chart_insights = chart.insights[:4]
+            for insight in top_chart_insights:
+                content += f"- {insight}\n"
+            content += "\n"
+    
+    if not has_insights:
+        content += "_No se encontraron insights en el análisis._\n"
+    
+    with open(insights_file, 'w', encoding='utf-8') as f:
+        f.write(content)
+    
+    return insights_file
+
+
 def process_document(file_path: str, config_path: str = "config.json", domain_prompts_file: str = None) -> DocumentAnalysis:
     """
     Procesa un documento completo:
@@ -64,6 +98,10 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     
     print(f"\n💾 Resultados guardados en: {output_file}")
     
+    # Crear resumen de insights
+    insights_file = create_insights_summary(analysis, output_file)
+    print(f"📄 Resumen de insights: {insights_file}")
+    
     # Mostrar resumen
     print(f"\n{'='*60}")
     print("RESUMEN")
@@ -76,7 +114,7 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
         print(f"\nPrimeros insights encontrados:")
         for i, chart in enumerate(analysis.chart_analysis[:3], 1):
             print(f"\n  {i}. {chart.title or 'Sin título'}")
-            print(f"     Tipo: {chart.chart_type}")
+            print(f"     Tipo: {chart.chart_data.type}")
             if chart.insights:
                 print(f"     Insights: {chart.insights[0][:100]}...")
     
