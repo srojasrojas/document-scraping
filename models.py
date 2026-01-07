@@ -3,9 +3,28 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 
+class ChartResource(BaseModel):
+    """Información del recurso de origen del gráfico"""
+    type: str = Field(description="Tipo de visualización (barra, línea, pie, tabla, matriz, etc.)")
+    resource: str = Field(description="Ruta al archivo de imagen")
+    resource_type: str = Field(default="image", description="Tipo de recurso")
+
+
+class ChartAnalysisResult(BaseModel):
+    """Resultado del análisis de IA (sin información de recurso)"""
+    chart_type: str = Field(description="Tipo de visualización (barra, línea, pie, tabla, matriz, etc.)")
+    title: Optional[str] = Field(None, description="Título de la visualización")
+    description: Optional[str] = Field(None, description="Descripción de lo que muestra")
+    categories: List[str] = Field(default_factory=list, description="Categorías o labels")
+    series: List[Dict[str, Any]] = Field(default_factory=list, description="Series de datos")
+    values: List[float] = Field(default_factory=list, description="Valores numéricos")
+    insights: List[str] = Field(default_factory=list, description="Insights clave")
+    metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas calculadas")
+
+
 class ChartData(BaseModel):
     """Datos extraídos de un gráfico o tabla"""
-    chart_type: str = Field(description="Tipo de visualización (barra, línea, pie, tabla, matriz, etc.)")
+    chart_data: ChartResource = Field(description="Información del recurso y tipo de gráfico")
     title: Optional[str] = Field(None, description="Título de la visualización")
     description: Optional[str] = Field(None, description="Descripción de lo que muestra")
     categories: List[str] = Field(default_factory=list, description="Categorías o labels")
