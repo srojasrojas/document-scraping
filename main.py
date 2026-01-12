@@ -9,7 +9,7 @@ from models import DocumentAnalysis
 def create_insights_summary(analysis: DocumentAnalysis, output_file: Path) -> Path:
     """
     Crea un resumen breve de insights en formato Markdown.
-    Máximo 4 insights por gráfico analizado.
+    Máximo 4 insights por gráfico y por página de texto analizado.
     """
     insights_file = output_file.parent / f"insights-{output_file.stem.replace('_analysis', '')}.md"
     
@@ -20,14 +20,33 @@ def create_insights_summary(analysis: DocumentAnalysis, output_file: Path) -> Pa
     
     has_insights = False
     
-    for chart_idx, chart in enumerate(analysis.chart_analysis, 1):
-        if chart.insights:
+    # Insights de gráficos/imágenes
+    if analysis.chart_analysis:
+        chart_has_insights = any(chart.insights for chart in analysis.chart_analysis)
+        if chart_has_insights:
             has_insights = True
-            content += f"## {chart_idx}. {chart.title or 'Sin título'} ({chart.chart_data.type})\n\n"
+            content += "## Insights de Gráficos\n\n"
             
-            # Máximo 4 insights por gráfico
-            top_chart_insights = chart.insights[:4]
-            for insight in top_chart_insights:
+            for chart_idx, chart in enumerate(analysis.chart_analysis, 1):
+                if chart.insights:
+                    content += f"### {chart_idx}. {chart.title or 'Sin título'} ({chart.chart_data.type})\n\n"
+                    
+                    top_chart_insights = chart.insights[:4]
+                    for insight in top_chart_insights:
+                        content += f"- {insight}\n"
+                    content += "\n"
+    
+    # Insights del análisis de texto con IA
+    text_pages_with_insights = [td for td in analysis.text_data if td.ai_analysis and td.ai_analysis.insights]
+    if text_pages_with_insights:
+        has_insights = True
+        content += "## Insights del Análisis de Texto\n\n"
+        
+        for text_data in text_pages_with_insights:
+            content += f"### Página {text_data.page_number}\n\n"
+            
+            top_text_insights = text_data.ai_analysis.insights[:4]
+            for insight in top_text_insights:
                 content += f"- {insight}\n"
             content += "\n"
     
