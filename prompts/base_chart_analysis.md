@@ -193,11 +193,11 @@ El campo `relevance_score` debe reflejar qué tan útil y valioso es el contenid
 
 **IMPORTANTE**: Si la imagen no contiene información analizable o es puramente decorativa, usa `relevance_score: 0.1` o menor y proporciona un insight indicando "Imagen sin contenido analizable" o similar.
 
-## Clasificación de Insights: Hallazgos vs Hipótesis
+## Clasificación de Insights: Hallazgos vs Hipótesis vs Observaciones
 
-Cada insight debe clasificarse como **"finding"** (hallazgo) o **"hypothesis"** (hipótesis):
+Cada insight debe clasificarse en una de tres categorías:
 
-### FINDING (Hallazgo)
+### FINDING (Hallazgo) 📊
 Un insight se clasifica como `"finding"` cuando:
 - Está respaldado por **datos cuantitativos** con tamaño de muestra alto (N ≥ 100)
 - Proviene de **encuestas representativas**, datos estadísticos o métricas consolidadas
@@ -205,7 +205,7 @@ Un insight se clasifica como `"finding"` cuando:
 - Permite **generalización** con confianza estadística
 - Incluye indicadores como: "Base: 500 casos", "n=1200", "Total encuestados: 350"
 
-### HYPOTHESIS (Hipótesis)
+### HYPOTHESIS (Hipótesis) 💡
 Un insight se clasifica como `"hypothesis"` cuando:
 - Proviene de **datos cualitativos**: focus groups, entrevistas, observaciones
 - Tiene **tamaño de muestra bajo** (N < 50) o no especificado
@@ -213,14 +213,26 @@ Un insight se clasifica como `"hypothesis"` cuando:
 - No pretende generalización amplia
 - Incluye indicadores como: "Base: 12 entrevistas", "Según focus group", "Observación exploratoria"
 
+### OBSERVATION (Observación) 📝
+Un insight se clasifica como `"observation"` cuando:
+- Es **información metodológica** o descriptiva del estudio (diseño, alcance, definiciones)
+- Describe **cómo se hizo el estudio**, no qué se encontró
+- Es **contexto del documento**: objetivos, estructura, marco teórico
+- No contiene conclusiones ni interpretaciones de datos
+- Ejemplos: "El estudio abarca 2015-2025", "La muestra incluye mayores de 18 años", "El benchmark considera 5 indicadores"
+
+**IMPORTANTE**: Las observaciones tienen valor documental pero NO son insights accionables. Usa esta categoría para evitar inflar el conteo de hallazgos/hipótesis con información puramente descriptiva.
+
 ### Regla por defecto
-**Si no hay información suficiente sobre el N o el método, clasifica como "hypothesis"** y deja `sample_size: null`.
+- Si hay datos cuantitativos con N especificado → revisa si es **finding**
+- Si es interpretación sin N claro → **hypothesis**
+- Si describe metodología/contexto sin conclusiones → **observation**
 
 ### Campos del insight
 ```json
 {
   "text": "El texto descriptivo del insight",
-  "classification": "finding" | "hypothesis",
+  "classification": "finding" | "hypothesis" | "observation",
   "sample_size": número_o_null,
   "evidence_type": "quantitative" | "qualitative" | "mixed" | null
 }

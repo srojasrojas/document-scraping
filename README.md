@@ -7,11 +7,14 @@ Sistema modular para extraer y analizar contenido de documentos PDF y PowerPoint
 - ✅ Extracción de texto de PDF y PPTX
 - ✅ Extracción de imágenes y gráficos
 - ✅ **Filtrado inteligente de imágenes con OCR** (descarta decoraciones sin valor)
+- ✅ **Sistema de relevancia** (0-1) para filtrar contenido sin valor analítico
 - ✅ **Detección de gráficos compuestos** (imagen + texto renderizado separado)
 - ✅ Análisis de gráficos con IA usando Pydantic-AI (Claude o OpenAI)
+- ✅ **Clasificación de insights**: Hallazgos (cuantitativos) vs Hipótesis (cualitativos) vs Observaciones (metodológicas)
 - ✅ **Sistema de prompts modular** (base + contexto de dominio vía CLI)
 - ✅ **Configuración genérica y reutilizable** entre empresas
 - ✅ **Contextos especializados opcionales** (AFP Chile, sector financiero, etc.)
+- ✅ **Resúmenes Markdown filtrados** por relevancia y tipo de insight
 - ✅ Identificación automática de métricas y porcentajes
 - ✅ Configuración externalizada en JSON
 - ✅ Código simple y mantenible
@@ -93,9 +96,12 @@ Edita `config.json`:
 ```json
 {
   "analysis": {
-    "provider": "openai",     // o "anthropic"
-    "model": "gpt-4o",        // o "claude-3-5-sonnet-20241022"
-    "analyze_text_with_ai": false
+    "provider": "openai",              // o "anthropic"
+    "model": "gpt-4o",                 // o "claude-3-5-sonnet-20241022"
+    "analyze_text_with_ai": false,     // Analizar páginas de texto (lento)
+    "relevance_threshold": 0.5,        // Umbral para insights (0-1)
+    "insight_filter": "actionable",    // Tipo de insights a mostrar
+    "show_insight_classification": true // Mostrar iconos de clasificación
   }
 }
 ```
@@ -169,6 +175,47 @@ Algunos PDFs renderizan gráficos donde las barras/líneas son imágenes pero lo
    pero el OCR de la imagen detectó pocos números → es un gráfico compuesto
 5. Al analizar con IA, se incluye el texto extraído como contexto adicional
 
+### 5. Clasificación de Insights y Filtrado
+
+El sistema clasifica cada insight en tres categorías según su valor analítico:
+
+| Clasificación | Icono | Descripción | Ejemplo |
+|---------------|-------|-------------|---------|
+| **Finding** (Hallazgo) | 📊 | Respaldado por datos cuantitativos con N ≥ 100 | "N=1260 casos con satisfacción de 68%" |
+| **Hypothesis** (Hipótesis) | 💡 | Observación cualitativa que requiere validación | "Los usuarios reportan confusión con el proceso" |
+| **Observation** (Observación) | 📝 | Descripción metodológica/contextual sin valor analítico | "El estudio utiliza encuestas telefónicas" |
+
+**Configuración del filtro:**
+
+```json
+{
+  "analysis": {
+    "relevance_threshold": 0.5,        // Solo insights con score ≥ 0.5
+    "insight_filter": "actionable",    // Tipo de insights a incluir
+    "show_insight_classification": true // Mostrar iconos y etiquetas
+  }
+}
+```
+
+**Opciones de `insight_filter`:**
+
+| Valor | Qué muestra en el resumen Markdown |
+|-------|-----------------------------------|
+| `"all"` | Todos (hallazgos + hipótesis + observaciones) |
+| `"findings"` | Solo hallazgos cuantitativos |
+| `"hypotheses"` | Solo hipótesis exploratorias |
+| `"observations"` | Solo observaciones metodológicas |
+| **`"actionable"`** | **Hallazgos + hipótesis (excluye observaciones) ← Recomendado** |
+
+**¿Por qué usar `"actionable"`?**  
+Las observaciones metodológicas ("El estudio abarca 2015-2025", "La muestra incluye mayores de 18 años") tienen valor documental pero NO son insights accionables. El filtro `actionable` las excluye del resumen manteniendo solo conclusiones útiles.
+
+**Cómo funcionan los umbrales:**
+
+- `relevance_threshold`: Filtra contenido de baja relevancia (0.0 = basura, 1.0 = altamente relevante)
+- Los insights con `relevance_score < threshold` no aparecen en el Markdown
+- El JSON completo siempre preserva TODOS los datos sin filtrado
+
 ## 📖 Uso
 
 ### Ejemplos Básicos
@@ -180,11 +227,15 @@ python main.py documento.pdf
 # Con prompts específicos del sector AFP chileno
 python main.py informe_afp.pdf --domain-prompts afp_chile
 
-# Con configuración personalizada
-python main.py documento.pptx --config mi_config.json
+# Con configuración personalizada (ej: API keys, filtros personalizados)
+python main.py documento.pptx --config private_config.json
 
 # Combinando opciones
 python main.py reporte.pdf --config custom.json --domain-prompts finanzas
+
+# Solo hallazgos cuantitativos (sin hipótesis ni observaciones)
+# Editar config.json: "insight_filter": "findings"
+python main.py estudio.pdf --config config.json
 ```
 
 ### Argumentos Disponibles
@@ -271,15 +322,21 @@ Ver [prompts/README.md](prompts/README.md) para guías detalladas.
 │       ├── afp_chile.md           # Sector AFP Chile
 │       └── [tu_dominio].md        # Tus contextos personalizados
 ├── requirements.txt               # Dependencias Python
-└── output/                        # Directorio de salida
+├── output/                        # Directorio de salida
     ├── images/                    # Imágenes extraídas y filtradas
     ├── text/                      # Texto extraído por página
-    └── data/                      # Análisis JSON estructurado
+    └── data/                      # Análisis completo
+        ├── documento_analysis.json         # Datos completos sin filtrado
+        └── insights-documento.md           # Resumen legible filtrado
 ```
 
 ## 🔍 Ejemplo de Salida
 
-El sistema genera un archivo JSON con:
+El sistema genera dos tipos de archivos:
+
+### 1. JSON Completo (sin filtrado)
+
+Todos los datos extraídos y analizados, incluyendo:
 
 ```json
 {
@@ -294,11 +351,48 @@ El sistema genera un archivo JSON con:
       "title": "Evolución de Imagen",
       "categories": ["Habitat", "Cuprum", "Modelo"],
       "values": [26, 10, 23],
-      "insights": ["Habitat lidera con 26%..."]
+      "insights": [
+        {
+          "text": "Habitat lidera con 26% de participación",
+          "classification": "finding",
+          "sample_size": 1200,
+          "evidence_type": "quantitative"
+        }
+      ],
+      "relevance_score": 0.85
     }
   ]
 }
 ```
+
+### 2. Resumen Markdown (filtrado)
+
+Archivo legible para humanos con insights filtrados:
+
+```markdown
+# Insights - documento.pdf
+
+**Fecha de análisis**: 2026-01-13 14:32
+**Total páginas**: 56 | **Gráficos analizados**: 12
+**Filtro**: Hallazgos + Hipótesis (sin observaciones) | **Umbral relevancia**: 0.5
+
+> 📊 **Hallazgo**: Respaldado por datos cuantitativos (N alto)  
+> 💡 **Hipótesis**: Exploratorio o cualitativo (requiere validación)  
+> 📝 **Observación**: Descripción metodológica/contextual
+
+## Insights de Gráficos
+
+### 1. Evolución de Satisfacción (línea)
+
+- 📊 **[Hallazgo]** (N=1260) Satisfacción neta alcanza 68 puntos, +5pp vs semestre anterior
+- 💡 **[Hipótesis]** La mejora se asocia a reducción de reclamos en atención telefónica
+
+---
+
+**Resumen**: 8 hallazgos | 15 hipótesis
+```
+
+**Control del contenido:** Ajusta `relevance_threshold` (0-1) e `insight_filter` en `config.json` para personalizar qué aparece en el resumen.
 
 ## 🛠️ Uso Programático
 
@@ -421,11 +515,18 @@ def extract_docx(self, file_path: str):
 Modifica los modelos en `models.py` para capturar más información:
 
 ```python
+class InsightItem(BaseModel):
+    """Insight con clasificación automática"""
+    text: str
+    classification: Literal["finding", "hypothesis", "observation"]
+    sample_size: Optional[int]
+    evidence_type: Optional[Literal["quantitative", "qualitative", "mixed"]]
+
 class ChartData(BaseModel):
     chart_type: str
     title: str
-    custom_metric: float  # ← Tu campo personalizado
-    insights: List[str]
+    insights: List[InsightItem]  # Lista de insights clasificados
+    relevance_score: float        # Score 0-1 para filtrado
 ```
 
 ### 3. Agregar Nuevos Filtros de Imagen
@@ -483,3 +584,75 @@ Claude puede analizar:
 - Gráficos combinados
 - Mapas de calor
 - Y más...
+
+## 🎯 Control de Calidad de Insights
+
+### Sistema de Relevancia
+
+Cada análisis (gráfico o texto) recibe un `relevance_score` de 0 a 1:
+
+| Score | Descripción | Ejemplo |
+|-------|-------------|---------|
+| **0.7-1.0** | Alta relevancia - Datos cuantitativos, métricas clave | Gráfico con KPIs, tabla con resultados de encuesta |
+| **0.4-0.7** | Relevancia media - Información descriptiva útil | Contexto cualitativo, explicaciones metodológicas |
+| **0.0-0.4** | Baja relevancia - Contenido decorativo o sin valor | Logos, banners, páginas de portada, texto legal |
+
+**Configurar el umbral:**
+
+```json
+{
+  "analysis": {
+    "relevance_threshold": 0.5  // Solo insights ≥ 0.5 en el resumen
+  }
+}
+```
+
+### Sistema de Clasificación
+
+Cada insight se clasifica automáticamente por la IA:
+
+#### 📊 Finding (Hallazgo)
+- **Cuándo**: Datos cuantitativos con N ≥ 100, encuestas representativas
+- **Ejemplo**: "N=1260 casos muestran satisfacción de 68%, +5pp vs semestre anterior"
+- **Valor**: Alto - Conclusiones generalizables con respaldo estadístico
+
+#### 💡 Hypothesis (Hipótesis)
+- **Cuándo**: Observaciones cualitativas, N < 50, interpretaciones exploratorias
+- **Ejemplo**: "Los usuarios reportan confusión con el proceso de afiliación"
+- **Valor**: Medio - Requiere validación adicional
+
+#### 📝 Observation (Observación)
+- **Cuándo**: Información metodológica, contexto del estudio, descripciones procedimentales
+- **Ejemplo**: "El estudio utiliza encuestas telefónicas en comunas urbanas con población >130K"
+- **Valor**: Documental - No es una conclusión, solo describe cómo se hizo el estudio
+
+### Filtrado Recomendado
+
+Para análisis ejecutivo, usa:
+
+```json
+{
+  "analysis": {
+    "relevance_threshold": 0.6,       // Filtro más estricto
+    "insight_filter": "actionable",   // Excluye observaciones metodológicas
+    "show_insight_classification": true
+  }
+}
+```
+
+Esto elimina:
+- ❌ Contenido decorativo (logos, banners)
+- ❌ Descripciones metodológicas ("El estudio abarca...")
+- ❌ Información procedimental sin insights
+- ✅ Mantiene solo hallazgos y conclusiones accionables
+
+### Casos de Uso por Filtro
+
+| `insight_filter` | Uso Recomendado |
+|------------------|-----------------|
+| `"actionable"` | **Reportes ejecutivos** - Solo conclusiones útiles |
+| `"findings"` | **Análisis cuantitativo** - Solo datos con respaldo estadístico |
+| `"all"` | **Documentación completa** - Incluye contexto metodológico |
+| `"hypotheses"` | **Exploración cualitativa** - Solo observaciones interpretativas |
+
+**Tip**: El JSON siempre contiene TODOS los datos. Los filtros solo afectan el resumen Markdown.

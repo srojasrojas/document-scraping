@@ -4,11 +4,11 @@ from datetime import datetime
 
 
 class InsightItem(BaseModel):
-    """Un insight individual con su clasificación como hallazgo o hipótesis"""
+    """Un insight individual con su clasificación como hallazgo, hipótesis u observación"""
     text: str = Field(description="El texto del insight")
-    classification: Literal["finding", "hypothesis"] = Field(
+    classification: Literal["finding", "hypothesis", "observation"] = Field(
         default="hypothesis", 
-        description="'finding' si está respaldado por datos cuantitativos con N alto (≥100), 'hypothesis' si es exploratorio, cualitativo o N bajo (<50)"
+        description="'finding' si está respaldado por datos cuantitativos con N alto (≥100), 'hypothesis' si es exploratorio/cualitativo, 'observation' si es descripción metodológica/contextual sin valor analítico"
     )
     sample_size: Optional[int] = Field(
         None, 

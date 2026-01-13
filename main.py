@@ -16,21 +16,35 @@ DEFAULT_INSIGHT_FILTER = "all"
 def format_insight_text(insight: InsightItem, show_classification: bool = True) -> str:
     """Formatea un insight para mostrar en el resumen Markdown"""
     if show_classification:
-        icon = "📊" if insight.classification == "finding" else "💡"
-        classification_label = "Hallazgo" if insight.classification == "finding" else "Hipótesis"
+        icons = {"finding": "📊", "hypothesis": "💡", "observation": "📝"}
+        labels = {"finding": "Hallazgo", "hypothesis": "Hipótesis", "observation": "Observación"}
+        icon = icons.get(insight.classification, "💡")
+        classification_label = labels.get(insight.classification, "Hipótesis")
         sample_info = f" (N={insight.sample_size})" if insight.sample_size else ""
         return f"{icon} **[{classification_label}]**{sample_info} {insight.text}"
     return insight.text
 
 
 def filter_insights_by_type(insights: list, insight_filter: str) -> list:
-    """Filtra insights según el tipo especificado"""
+    """Filtra insights según el tipo especificado
+    
+    Opciones:
+    - 'all': Todos los insights (hallazgos + hipótesis + observaciones)
+    - 'findings': Solo hallazgos cuantitativos
+    - 'hypotheses': Solo hipótesis exploratorias
+    - 'observations': Solo observaciones metodológicas/descriptivas
+    - 'actionable': Hallazgos + hipótesis (excluye observaciones)
+    """
     if insight_filter == "all":
         return insights
     elif insight_filter == "findings":
         return [i for i in insights if i.classification == "finding"]
     elif insight_filter == "hypotheses":
         return [i for i in insights if i.classification == "hypothesis"]
+    elif insight_filter == "observations":
+        return [i for i in insights if i.classification == "observation"]
+    elif insight_filter == "actionable":
+        return [i for i in insights if i.classification in ("finding", "hypothesis")]
     return insights
 
 
@@ -54,14 +68,21 @@ def create_insights_summary(
     content += f"**Total páginas**: {analysis.total_pages} | **Gráficos analizados**: {len(analysis.chart_analysis)}\n\n"
     
     # Mostrar filtros aplicados
-    filter_label = {"all": "Todos", "findings": "Solo Hallazgos", "hypotheses": "Solo Hipótesis"}
+    filter_label = {
+        "all": "Todos", 
+        "findings": "Solo Hallazgos", 
+        "hypotheses": "Solo Hipótesis",
+        "observations": "Solo Observaciones",
+        "actionable": "Hallazgos + Hipótesis (sin observaciones)"
+    }
     content += f"**Filtro**: {filter_label.get(insight_filter, insight_filter)} | **Umbral relevancia**: {relevance_threshold}\n\n"
     content += "---\n\n"
     
     # Leyenda de clasificación
     if show_classification:
         content += "> 📊 **Hallazgo**: Respaldado por datos cuantitativos (N alto)  \n"
-        content += "> 💡 **Hipótesis**: Exploratorio o cualitativo (requiere validación)\n\n"
+        content += "> 💡 **Hipótesis**: Exploratorio o cualitativo (requiere validación)  \n"
+        content += "> 📝 **Observación**: Descripción metodológica/contextual\n\n"
     
     has_insights = False
     total_findings = 0
@@ -93,8 +114,9 @@ def create_insights_summary(
                     content += f"- {format_insight_text(insight, show_classification)}\n"
                     if insight.classification == "finding":
                         total_findings += 1
-                    else:
+                    elif insight.classification == "hypothesis":
                         total_hypotheses += 1
+                    # observations no se cuentan en el resumen
                 content += "\n"
     
     # Insights del análisis de texto con IA (filtrados por relevancia)
@@ -122,8 +144,9 @@ def create_insights_summary(
                 content += f"- {format_insight_text(insight, show_classification)}\n"
                 if insight.classification == "finding":
                     total_findings += 1
-                else:
+                elif insight.classification == "hypothesis":
                     total_hypotheses += 1
+                # observations no se cuentan en el resumen
             content += "\n"
     
     # Resumen de clasificación

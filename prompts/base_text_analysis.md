@@ -57,7 +57,7 @@ Extrae la información en formato estructurado:
   },
   "insights": [
     {
-      "text": "Descripción del hallazgo o conclusión",
+      "text": "Descripción del hallazgo con datos cuantitativos",
       "classification": "finding",
       "sample_size": 500,
       "evidence_type": "quantitative"
@@ -67,6 +67,12 @@ Extrae la información en formato estructurado:
       "classification": "hypothesis",
       "sample_size": null,
       "evidence_type": "qualitative"
+    },
+    {
+      "text": "El estudio utiliza metodología X con alcance Y",
+      "classification": "observation",
+      "sample_size": null,
+      "evidence_type": null
     }
   ],
   "keywords": ["palabras clave del texto"],
@@ -139,11 +145,11 @@ El campo `relevance_score` debe reflejar qué tan útil y valioso es el contenid
 
 **IMPORTANTE**: Si el texto no contiene información analizable o parece ser ruido/error de extracción, usa `relevance_score: 0.1` o menor y NO generes insights forzados. Es preferible un array vacío de insights que insights inventados o irrelevantes.
 
-## Clasificación de Insights: Hallazgos vs Hipótesis
+## Clasificación de Insights: Hallazgos vs Hipótesis vs Observaciones
 
-Cada insight debe clasificarse como **"finding"** (hallazgo) o **"hypothesis"** (hipótesis):
+Cada insight debe clasificarse en una de tres categorías:
 
-### FINDING (Hallazgo)
+### FINDING (Hallazgo) 📊
 Un insight se clasifica como `"finding"` cuando:
 - Está respaldado por **datos cuantitativos** con tamaño de muestra alto (N ≥ 100)
 - Proviene de **encuestas representativas**, datos estadísticos o métricas consolidadas
@@ -151,7 +157,7 @@ Un insight se clasifica como `"finding"` cuando:
 - Permite **generalización** con confianza estadística
 - Incluye indicadores como: "Base: 500 casos", "n=1200", "Muestra de 350 encuestados"
 
-### HYPOTHESIS (Hipótesis)
+### HYPOTHESIS (Hipótesis) 💡
 Un insight se clasifica como `"hypothesis"` cuando:
 - Proviene de **datos cualitativos**: focus groups, entrevistas, observaciones
 - Tiene **tamaño de muestra bajo** (N < 50) o no especificado
@@ -159,14 +165,30 @@ Un insight se clasifica como `"hypothesis"` cuando:
 - No pretende generalización amplia
 - Incluye indicadores como: "Según entrevistas", "Los participantes mencionaron", "Se observó que"
 
+### OBSERVATION (Observación) 📝
+Un insight se clasifica como `"observation"` cuando:
+- Es **información metodológica** o descriptiva del estudio (diseño, alcance, definiciones)
+- Describe **cómo se hizo el estudio**, no qué se encontró
+- Es **contexto del documento**: objetivos, estructura, marco teórico, descripciones de proceso
+- No contiene conclusiones ni interpretaciones de datos
+- Ejemplos:
+  - "El estudio abarca el período 2015-2025" → observation
+  - "La muestra incluye mayores de 18 años residentes en comunas urbanas" → observation
+  - "El informe busca fortalecer el enfoque hacia el cliente" → observation
+  - "El cuestionario mide satisfacción en escala de 1 a 7" → observation
+
+**IMPORTANTE**: Las observaciones tienen valor documental pero NO son insights accionables. Usa esta categoría para evitar inflar el conteo de hallazgos/hipótesis con información puramente descriptiva.
+
 ### Regla por defecto
-**Si no hay información suficiente sobre el N o el método, clasifica como "hypothesis"** y deja `sample_size: null`.
+- Si hay datos cuantitativos con N especificado → revisa si es **finding**
+- Si es interpretación sin N claro → **hypothesis**
+- Si describe metodología/contexto sin conclusiones → **observation**
 
 ### Campos del insight
 ```json
 {
   "text": "El texto descriptivo del insight",
-  "classification": "finding" | "hypothesis",
+  "classification": "finding" | "hypothesis" | "observation",
   "sample_size": número_o_null,
   "evidence_type": "quantitative" | "qualitative" | "mixed" | null
 }

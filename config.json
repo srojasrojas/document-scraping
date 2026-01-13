@@ -40,7 +40,7 @@
     "model": "gpt-4o",
     "analyze_text_with_ai": false,
     "relevance_threshold": 0.5,
-    "insight_filter": "all",
+    "insight_filter": "actionable",
     "show_insight_classification": true,
     "anthropic_api_key": null,
     "openai_api_key": null
