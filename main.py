@@ -1,19 +1,50 @@
 import json
 import argparse
 from pathlib import Path
+from typing import Literal
 from extractor import DocumentExtractor
 from analyzer import DocumentAnalyzer
-from models import DocumentAnalysis
+from models import DocumentAnalysis, InsightItem
 
 
 # Umbral mínimo de relevancia para incluir en el resumen de insights
 DEFAULT_RELEVANCE_THRESHOLD = 0.5
+# Filtro de tipo de insight: "all", "findings", "hypotheses"
+DEFAULT_INSIGHT_FILTER = "all"
 
 
-def create_insights_summary(analysis: DocumentAnalysis, output_file: Path, relevance_threshold: float = DEFAULT_RELEVANCE_THRESHOLD) -> Path:
+def format_insight_text(insight: InsightItem, show_classification: bool = True) -> str:
+    """Formatea un insight para mostrar en el resumen Markdown"""
+    if show_classification:
+        icon = "📊" if insight.classification == "finding" else "💡"
+        classification_label = "Hallazgo" if insight.classification == "finding" else "Hipótesis"
+        sample_info = f" (N={insight.sample_size})" if insight.sample_size else ""
+        return f"{icon} **[{classification_label}]**{sample_info} {insight.text}"
+    return insight.text
+
+
+def filter_insights_by_type(insights: list, insight_filter: str) -> list:
+    """Filtra insights según el tipo especificado"""
+    if insight_filter == "all":
+        return insights
+    elif insight_filter == "findings":
+        return [i for i in insights if i.classification == "finding"]
+    elif insight_filter == "hypotheses":
+        return [i for i in insights if i.classification == "hypothesis"]
+    return insights
+
+
+def create_insights_summary(
+    analysis: DocumentAnalysis, 
+    output_file: Path, 
+    relevance_threshold: float = DEFAULT_RELEVANCE_THRESHOLD,
+    insight_filter: str = DEFAULT_INSIGHT_FILTER,
+    show_classification: bool = True
+) -> Path:
     """
     Crea un resumen breve de insights en formato Markdown.
     Solo incluye insights con relevance_score >= threshold.
+    Filtra por tipo de insight según insight_filter.
     Máximo 4 insights por gráfico y por página de texto analizado.
     """
     insights_file = output_file.parent / f"insights-{output_file.stem.replace('_analysis', '')}.md"
@@ -21,9 +52,20 @@ def create_insights_summary(analysis: DocumentAnalysis, output_file: Path, relev
     content = f"# Insights - {analysis.filename}\n\n"
     content += f"**Fecha de análisis**: {analysis.extraction_date.strftime('%Y-%m-%d %H:%M')}\n\n"
     content += f"**Total páginas**: {analysis.total_pages} | **Gráficos analizados**: {len(analysis.chart_analysis)}\n\n"
+    
+    # Mostrar filtros aplicados
+    filter_label = {"all": "Todos", "findings": "Solo Hallazgos", "hypotheses": "Solo Hipótesis"}
+    content += f"**Filtro**: {filter_label.get(insight_filter, insight_filter)} | **Umbral relevancia**: {relevance_threshold}\n\n"
     content += "---\n\n"
     
+    # Leyenda de clasificación
+    if show_classification:
+        content += "> 📊 **Hallazgo**: Respaldado por datos cuantitativos (N alto)  \n"
+        content += "> 💡 **Hipótesis**: Exploratorio o cualitativo (requiere validación)\n\n"
+    
     has_insights = False
+    total_findings = 0
+    total_hypotheses = 0
     
     # Insights de gráficos/imágenes (filtrados por relevancia)
     if analysis.chart_analysis:
@@ -32,16 +74,27 @@ def create_insights_summary(analysis: DocumentAnalysis, output_file: Path, relev
             if chart.insights and chart.relevance_score >= relevance_threshold
         ]
         
-        if relevant_charts:
+        # Filtrar charts que tengan insights del tipo deseado
+        charts_with_filtered_insights = []
+        for chart in relevant_charts:
+            filtered = filter_insights_by_type(chart.insights, insight_filter)
+            if filtered:
+                charts_with_filtered_insights.append((chart, filtered))
+        
+        if charts_with_filtered_insights:
             has_insights = True
             content += "## Insights de Gráficos\n\n"
             
-            for chart_idx, chart in enumerate(relevant_charts, 1):
+            for chart_idx, (chart, filtered_insights) in enumerate(charts_with_filtered_insights, 1):
                 content += f"### {chart_idx}. {chart.title or 'Sin título'} ({chart.chart_data.type})\n\n"
                 
-                top_chart_insights = chart.insights[:4]
-                for insight in top_chart_insights:
-                    content += f"- {insight}\n"
+                top_insights = filtered_insights[:4]
+                for insight in top_insights:
+                    content += f"- {format_insight_text(insight, show_classification)}\n"
+                    if insight.classification == "finding":
+                        total_findings += 1
+                    else:
+                        total_hypotheses += 1
                 content += "\n"
     
     # Insights del análisis de texto con IA (filtrados por relevancia)
@@ -50,19 +103,34 @@ def create_insights_summary(analysis: DocumentAnalysis, output_file: Path, relev
         if td.ai_analysis and td.ai_analysis.insights and td.ai_analysis.relevance_score >= relevance_threshold
     ]
     
-    if text_pages_with_insights:
+    # Filtrar páginas que tengan insights del tipo deseado
+    pages_with_filtered_insights = []
+    for td in text_pages_with_insights:
+        filtered = filter_insights_by_type(td.ai_analysis.insights, insight_filter)
+        if filtered:
+            pages_with_filtered_insights.append((td, filtered))
+    
+    if pages_with_filtered_insights:
         has_insights = True
         content += "## Insights del Análisis de Texto\n\n"
         
-        for text_data in text_pages_with_insights:
+        for text_data, filtered_insights in pages_with_filtered_insights:
             content += f"### Página {text_data.page_number}\n\n"
             
-            top_text_insights = text_data.ai_analysis.insights[:4]
-            for insight in top_text_insights:
-                content += f"- {insight}\n"
+            top_insights = filtered_insights[:4]
+            for insight in top_insights:
+                content += f"- {format_insight_text(insight, show_classification)}\n"
+                if insight.classification == "finding":
+                    total_findings += 1
+                else:
+                    total_hypotheses += 1
             content += "\n"
     
-    if not has_insights:
+    # Resumen de clasificación
+    if has_insights:
+        content += "---\n\n"
+        content += f"**Resumen**: {total_findings} hallazgos | {total_hypotheses} hipótesis\n"
+    else:
         content += "_No se encontraron insights relevantes en el análisis._\n"
         content += f"\n_Umbral de relevancia: {relevance_threshold}_\n"
     
@@ -130,14 +198,40 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     
     print(f"\n💾 Resultados guardados en: {output_file}")
     
-    # Crear resumen de insights (con filtro de relevancia)
+    # Crear resumen de insights (con filtros de relevancia y tipo)
     relevance_threshold = config.get('analysis', {}).get('relevance_threshold', DEFAULT_RELEVANCE_THRESHOLD)
-    insights_file = create_insights_summary(analysis, output_file, relevance_threshold)
+    insight_filter = config.get('analysis', {}).get('insight_filter', DEFAULT_INSIGHT_FILTER)
+    show_classification = config.get('analysis', {}).get('show_insight_classification', True)
+    
+    insights_file = create_insights_summary(
+        analysis, 
+        output_file, 
+        relevance_threshold,
+        insight_filter,
+        show_classification
+    )
     print(f"📄 Resumen de insights: {insights_file}")
     
-    # Calcular estadísticas de relevancia
+    # Calcular estadísticas de relevancia y clasificación
     relevant_charts = [c for c in analysis.chart_analysis if c.relevance_score >= relevance_threshold]
     relevant_text_pages = [t for t in analysis.text_data if t.ai_analysis and t.ai_analysis.relevance_score >= relevance_threshold]
+    
+    # Contar hallazgos vs hipótesis
+    total_findings = 0
+    total_hypotheses = 0
+    for chart in analysis.chart_analysis:
+        for insight in chart.insights:
+            if insight.classification == "finding":
+                total_findings += 1
+            else:
+                total_hypotheses += 1
+    for td in analysis.text_data:
+        if td.ai_analysis:
+            for insight in td.ai_analysis.insights:
+                if insight.classification == "finding":
+                    total_findings += 1
+                else:
+                    total_hypotheses += 1
     
     # Mostrar resumen
     print(f"\n{'='*60}")
@@ -150,6 +244,7 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
         total_text_analyzed = len([t for t in analysis.text_data if t.ai_analysis])
         print(f"Páginas de texto analizadas: {total_text_analyzed} ({len(relevant_text_pages)} relevantes)")
     print(f"Umbral de relevancia: {relevance_threshold}")
+    print(f"📊 Hallazgos: {total_findings} | 💡 Hipótesis: {total_hypotheses}")
     
     if analysis.chart_analysis:
         print(f"\nPrimeros insights encontrados:")
@@ -157,7 +252,9 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
             print(f"\n  {i}. {chart.title or 'Sin título'}")
             print(f"     Tipo: {chart.chart_data.type}")
             if chart.insights:
-                print(f"     Insights: {chart.insights[0][:100]}...")
+                first_insight = chart.insights[0]
+                classification = "Hallazgo" if first_insight.classification == "finding" else "Hipótesis"
+                print(f"     [{classification}]: {first_insight.text[:80]}...")
     
     return analysis
 

@@ -56,8 +56,18 @@ Extrae la información en formato estructurado:
     "people": ["personas clave"]
   },
   "insights": [
-    "Hallazgo principal 1",
-    "Hallazgo principal 2"
+    {
+      "text": "Descripción del hallazgo o conclusión",
+      "classification": "finding",
+      "sample_size": 500,
+      "evidence_type": "quantitative"
+    },
+    {
+      "text": "Observación exploratoria que requiere validación",
+      "classification": "hypothesis",
+      "sample_size": null,
+      "evidence_type": "qualitative"
+    }
   ],
   "keywords": ["palabras clave del texto"],
   "relevance_score": 0.85
@@ -89,9 +99,9 @@ Extrae la información en formato estructurado:
   "dates": ["Q3 2024"],
   "entities": {"products": ["producto Premium"]},
   "insights": [
-    "Crecimiento de ingresos de 18% YoY en Q3 2024",
-    "NPS de 62 indica liderazgo en satisfacción del sector",
-    "Lanzamiento exitoso de Premium: 15K clientes en primer mes"
+    {"text": "Crecimiento de ingresos de 18% YoY en Q3 2024", "classification": "finding", "sample_size": null, "evidence_type": "quantitative"},
+    {"text": "NPS de 62 indica liderazgo en satisfacción del sector", "classification": "finding", "sample_size": null, "evidence_type": "quantitative"},
+    {"text": "Lanzamiento exitoso de Premium: 15K clientes en primer mes", "classification": "finding", "sample_size": 15000, "evidence_type": "quantitative"}
   ],
   "keywords": ["ingresos", "NPS", "Premium", "liderazgo"]
 }
@@ -128,3 +138,36 @@ El campo `relevance_score` debe reflejar qué tan útil y valioso es el contenid
 - Páginas de transición sin contenido sustantivo
 
 **IMPORTANTE**: Si el texto no contiene información analizable o parece ser ruido/error de extracción, usa `relevance_score: 0.1` o menor y NO generes insights forzados. Es preferible un array vacío de insights que insights inventados o irrelevantes.
+
+## Clasificación de Insights: Hallazgos vs Hipótesis
+
+Cada insight debe clasificarse como **"finding"** (hallazgo) o **"hypothesis"** (hipótesis):
+
+### FINDING (Hallazgo)
+Un insight se clasifica como `"finding"` cuando:
+- Está respaldado por **datos cuantitativos** con tamaño de muestra alto (N ≥ 100)
+- Proviene de **encuestas representativas**, datos estadísticos o métricas consolidadas
+- Tiene **evidencia estadística clara** mencionada en el texto
+- Permite **generalización** con confianza estadística
+- Incluye indicadores como: "Base: 500 casos", "n=1200", "Muestra de 350 encuestados"
+
+### HYPOTHESIS (Hipótesis)
+Un insight se clasifica como `"hypothesis"` cuando:
+- Proviene de **datos cualitativos**: focus groups, entrevistas, observaciones
+- Tiene **tamaño de muestra bajo** (N < 50) o no especificado
+- Es una **interpretación o patrón observado** que requiere validación adicional
+- No pretende generalización amplia
+- Incluye indicadores como: "Según entrevistas", "Los participantes mencionaron", "Se observó que"
+
+### Regla por defecto
+**Si no hay información suficiente sobre el N o el método, clasifica como "hypothesis"** y deja `sample_size: null`.
+
+### Campos del insight
+```json
+{
+  "text": "El texto descriptivo del insight",
+  "classification": "finding" | "hypothesis",
+  "sample_size": número_o_null,
+  "evidence_type": "quantitative" | "qualitative" | "mixed" | null
+}
+```

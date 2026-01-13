@@ -99,10 +99,18 @@ Devuelve la información en el siguiente formato JSON (ajustado al schema ChartD
   ],
   "values": [todos los valores numéricos extraídos],
   "insights": [
-    "Insight 1: descripción de tendencia o hallazgo principal",
-    "Insight 2: comparación clave entre categorías/series",
-    "Insight 3: cambio, patrón o anomalía significativa",
-    "..."
+    {
+      "text": "Descripción del insight o conclusión",
+      "classification": "finding",
+      "sample_size": 500,
+      "evidence_type": "quantitative"
+    },
+    {
+      "text": "Otro insight basado en observación cualitativa",
+      "classification": "hypothesis",
+      "sample_size": null,
+      "evidence_type": "qualitative"
+    }
   ],
   "metrics": {
     "max_value": valor_máximo,
@@ -184,3 +192,36 @@ El campo `relevance_score` debe reflejar qué tan útil y valioso es el contenid
 - Cuando NO puedes extraer datos significativos
 
 **IMPORTANTE**: Si la imagen no contiene información analizable o es puramente decorativa, usa `relevance_score: 0.1` o menor y proporciona un insight indicando "Imagen sin contenido analizable" o similar.
+
+## Clasificación de Insights: Hallazgos vs Hipótesis
+
+Cada insight debe clasificarse como **"finding"** (hallazgo) o **"hypothesis"** (hipótesis):
+
+### FINDING (Hallazgo)
+Un insight se clasifica como `"finding"` cuando:
+- Está respaldado por **datos cuantitativos** con tamaño de muestra alto (N ≥ 100)
+- Proviene de **encuestas representativas**, datos estadísticos o métricas consolidadas
+- Tiene **evidencia estadística clara**: gráficos con bases grandes, tablas con totales significativos
+- Permite **generalización** con confianza estadística
+- Incluye indicadores como: "Base: 500 casos", "n=1200", "Total encuestados: 350"
+
+### HYPOTHESIS (Hipótesis)
+Un insight se clasifica como `"hypothesis"` cuando:
+- Proviene de **datos cualitativos**: focus groups, entrevistas, observaciones
+- Tiene **tamaño de muestra bajo** (N < 50) o no especificado
+- Es una **interpretación o patrón observado** que requiere validación
+- No pretende generalización amplia
+- Incluye indicadores como: "Base: 12 entrevistas", "Según focus group", "Observación exploratoria"
+
+### Regla por defecto
+**Si no hay información suficiente sobre el N o el método, clasifica como "hypothesis"** y deja `sample_size: null`.
+
+### Campos del insight
+```json
+{
+  "text": "El texto descriptivo del insight",
+  "classification": "finding" | "hypothesis",
+  "sample_size": número_o_null,
+  "evidence_type": "quantitative" | "qualitative" | "mixed" | null
+}
+```

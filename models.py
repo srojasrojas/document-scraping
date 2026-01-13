@@ -1,6 +1,23 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from datetime import datetime
+
+
+class InsightItem(BaseModel):
+    """Un insight individual con su clasificación como hallazgo o hipótesis"""
+    text: str = Field(description="El texto del insight")
+    classification: Literal["finding", "hypothesis"] = Field(
+        default="hypothesis", 
+        description="'finding' si está respaldado por datos cuantitativos con N alto (≥100), 'hypothesis' si es exploratorio, cualitativo o N bajo (<50)"
+    )
+    sample_size: Optional[int] = Field(
+        None, 
+        description="Tamaño de muestra (N) si se menciona o puede inferirse"
+    )
+    evidence_type: Optional[Literal["quantitative", "qualitative", "mixed"]] = Field(
+        None, 
+        description="Tipo de evidencia: 'quantitative' (encuestas, datos estadísticos), 'qualitative' (focus groups, entrevistas), 'mixed'"
+    )
 
 
 class ChartResource(BaseModel):
@@ -18,7 +35,7 @@ class ChartAnalysisResult(BaseModel):
     categories: List[str] = Field(default_factory=list, description="Categorías o labels")
     series: List[Dict[str, Any]] = Field(default_factory=list, description="Series de datos")
     values: List[float] = Field(default_factory=list, description="Valores numéricos")
-    insights: List[str] = Field(default_factory=list, description="Insights clave")
+    insights: List[InsightItem] = Field(default_factory=list, description="Insights clasificados como hallazgos o hipótesis")
     metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas calculadas")
     relevance_score: float = Field(default=0.5, ge=0, le=1, description="Puntuación de relevancia (0-1). 0=sin valor, 1=muy relevante. Imágenes decorativas, logos o sin datos útiles deben tener score bajo.")
 
@@ -31,7 +48,7 @@ class ChartData(BaseModel):
     categories: List[str] = Field(default_factory=list, description="Categorías o labels")
     series: List[Dict[str, Any]] = Field(default_factory=list, description="Series de datos")
     values: List[float] = Field(default_factory=list, description="Valores numéricos")
-    insights: List[str] = Field(default_factory=list, description="Insights clave")
+    insights: List[InsightItem] = Field(default_factory=list, description="Insights clasificados como hallazgos o hipótesis")
     metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas calculadas")
     relevance_score: float = Field(default=0.5, ge=0, le=1, description="Puntuación de relevancia (0-1)")
 
@@ -42,7 +59,7 @@ class TextAnalysis(BaseModel):
     percentages: List[Dict[str, Any]] = Field(default_factory=list, description="Porcentajes con contexto")
     dates: List[str] = Field(default_factory=list, description="Fechas mencionadas")
     entities: Dict[str, List[str]] = Field(default_factory=dict, description="Entidades (empresas, productos, personas)")
-    insights: List[str] = Field(default_factory=list, description="Hallazgos principales")
+    insights: List[InsightItem] = Field(default_factory=list, description="Insights clasificados como hallazgos o hipótesis")
     keywords: List[str] = Field(default_factory=list, description="Palabras clave")
     relevance_score: float = Field(default=0.5, ge=0, le=1, description="Puntuación de relevancia (0-1). 0=sin valor/ruido, 1=muy relevante. Páginas sin contenido útil o con errores de extracción deben tener score bajo.")
 
