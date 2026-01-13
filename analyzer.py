@@ -170,6 +170,7 @@ class DocumentAnalyzer:
         }
         media_type = mime_types.get(ext, 'image/png')
 
+        # Construir el prompt base
         user_prompt = """Analiza este gráfico/tabla siguiendo las instrucciones del sistema.
 
 IMPORTANTE:
@@ -177,9 +178,28 @@ IMPORTANTE:
 2. Identifica TODAS las categorías y series
 3. Proporciona insights específicos basados en los datos
 4. Calcula métricas relevantes (promedios, totales, variaciones)
-5. Usa la terminología y contexto del dominio si aplica
+5. Usa la terminología y contexto del dominio si aplica"""
 
-Devuelve la información en el formato JSON estructurado especificado."""
+        # Si es un gráfico compuesto, agregar el contexto textual
+        if image_data.is_composite and image_data.context_text:
+            user_prompt += f"""
+
+NOTA IMPORTANTE - GRÁFICO COMPUESTO:
+Este gráfico tiene valores numéricos y etiquetas que están renderizados como texto 
+separado de la imagen. A continuación se proporciona el texto extraído del PDF que 
+está cerca o superpuesto al gráfico. UTILIZA ESTOS VALORES para complementar tu análisis:
+
+--- TEXTO DEL PDF CERCA DEL GRÁFICO ---
+{image_data.context_text}
+--- FIN DEL TEXTO ---
+
+Combina la información visual del gráfico con los valores numéricos del texto para 
+proporcionar un análisis completo y preciso."""
+
+            if self.verbose:
+                print(f"  📊 Gráfico compuesto: agregando {len(image_data.context_text)} chars de contexto")
+
+        user_prompt += "\n\nDevuelve la información en el formato JSON estructurado especificado."
 
         image_content = BinaryContent(data=image_bytes, media_type=media_type)
         
@@ -224,7 +244,8 @@ Devuelve la información en el formato JSON estructurado especificado."""
             series=analysis_result.series,
             values=analysis_result.values,
             insights=analysis_result.insights,
-            metrics=analysis_result.metrics
+            metrics=analysis_result.metrics,
+            relevance_score=analysis_result.relevance_score
         )
         
     def analyze_all_images(self, images: List[ImageData]) -> List[ChartData]:

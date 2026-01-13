@@ -23,12 +23,23 @@
       "ocr_lang": "spa+eng",
       "verbose": true,
       "tesseract_cmd": null
+    },
+    "composite_detection": {
+      "enabled": true,
+      "proximity_margin": 50,
+      "min_chart_width": 200,
+      "min_chart_height": 150,
+      "min_page_ratio": 0.1,
+      "min_nearby_numbers": 3,
+      "ocr_number_threshold": 2,
+      "verbose": true
     }
   },
   "analysis": {
     "provider": "openai",
     "model": "gpt-4o",
     "analyze_text_with_ai": false,
+    "relevance_threshold": 0.5,
     "anthropic_api_key": null,
     "openai_api_key": null
   },

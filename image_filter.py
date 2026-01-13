@@ -8,7 +8,7 @@ import json
 import os
 import platform
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 from dataclasses import dataclass
 from PIL import Image
 import pytesseract
@@ -44,6 +44,9 @@ class ImageFilter:
         with open(config_path, 'r') as f:
             config_data = json.load(f)
         self.config = Config(**config_data)
+        
+        # Almacenar resultados de OCR para uso posterior (ej: detección de composites)
+        self._ocr_results: Dict[str, int] = {}
         
         # Obtener configuración de filtrado (con valores por defecto)
         filter_config = self.config.extraction.get('image_filter', {})
@@ -294,10 +297,17 @@ class ImageFilter:
         valuable = []
         discarded = []
         
+        # Limpiar resultados de OCR anteriores
+        self._ocr_results = {}
+        
         print(f"\n🔍 Filtrando {len(images)} imágenes con OCR...")
         
         for img in images:
             is_valuable, reason, ocr_result = self.is_valuable_image(img)
+            
+            # Guardar resultado de OCR para uso posterior
+            if ocr_result:
+                self._ocr_results[img.filename] = ocr_result.digit_count
             
             if is_valuable:
                 valuable.append(img)
@@ -313,6 +323,15 @@ class ImageFilter:
         print(f"   ✗ Imágenes descartadas: {len(discarded)}")
         
         return valuable, discarded
+    
+    def get_ocr_results(self) -> Dict[str, int]:
+        """
+        Retorna los resultados de OCR del último filtrado.
+        
+        Returns:
+            Dict con {filename: digit_count} para cada imagen procesada
+        """
+        return self._ocr_results.copy()
 
 
 if __name__ == "__main__":

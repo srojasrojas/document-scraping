@@ -111,7 +111,8 @@ Devuelve la información en el siguiente formato JSON (ajustado al schema ChartD
     "total": total_si_aplica,
     "growth_rate": "X% de variación",
     "otras_métricas_relevantes": valores
-  }
+  },
+  "relevance_score": 0.85
 }
 ```
 
@@ -160,3 +161,26 @@ Antes de entregar el resultado, verifica:
 - ✓ Los insights son específicos y verificables con los datos
 - ✓ Las métricas calculadas son correctas
 - ✓ Para tablas: todos los encabezados y filas están capturados
+
+## Evaluación de Relevancia (relevance_score)
+
+El campo `relevance_score` debe reflejar qué tan útil y valioso es el contenido analizado:
+
+**Score ALTO (0.7 - 1.0):**
+- Gráficos/tablas con datos numéricos claros y extraíbles
+- Visualizaciones con insights accionables
+- Información cuantitativa relevante para análisis
+
+**Score MEDIO (0.4 - 0.7):**
+- Visualizaciones con algunos datos pero información incompleta
+- Gráficos legibles pero sin contexto claro
+- Datos parcialmente visibles
+
+**Score BAJO (0.0 - 0.4):**
+- Imágenes decorativas, logos, banners
+- Fotografías sin datos cuantitativos
+- Elementos visuales de diseño sin información analizable
+- Gráficos ilegibles o corruptos
+- Cuando NO puedes extraer datos significativos
+
+**IMPORTANTE**: Si la imagen no contiene información analizable o es puramente decorativa, usa `relevance_score: 0.1` o menor y proporciona un insight indicando "Imagen sin contenido analizable" o similar.

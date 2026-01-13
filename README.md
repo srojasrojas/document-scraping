@@ -7,6 +7,7 @@ Sistema modular para extraer y analizar contenido de documentos PDF y PowerPoint
 - ✅ Extracción de texto de PDF y PPTX
 - ✅ Extracción de imágenes y gráficos
 - ✅ **Filtrado inteligente de imágenes con OCR** (descarta decoraciones sin valor)
+- ✅ **Detección de gráficos compuestos** (imagen + texto renderizado separado)
 - ✅ Análisis de gráficos con IA usando Pydantic-AI (Claude o OpenAI)
 - ✅ **Sistema de prompts modular** (base + contexto de dominio vía CLI)
 - ✅ **Configuración genérica y reutilizable** entre empresas
@@ -138,6 +139,35 @@ El sistema usa OCR para determinar si una imagen contiene información valiosa:
 - Nombres de empresas comunes en tus documentos
 - Eslóganes repetitivos
 - Términos legales estándar
+
+### 4. Detección de Gráficos Compuestos
+
+Algunos PDFs renderizan gráficos donde las barras/líneas son imágenes pero los valores numéricos están como texto separado. El sistema detecta automáticamente estos casos y enriquece el análisis:
+
+```json
+{
+  "extraction": {
+    "composite_detection": {
+      "enabled": true,
+      "proximity_margin": 50,      // Margen en puntos para buscar texto cercano
+      "min_chart_width": 200,      // Ancho mínimo para considerar como gráfico
+      "min_chart_height": 150,     // Alto mínimo para considerar como gráfico
+      "min_page_ratio": 0.1,       // Ratio mínimo respecto a la página
+      "min_nearby_numbers": 3,     // Mínimo números en texto cercano
+      "ocr_number_threshold": 2,   // Si OCR detecta menos números, es candidato
+      "verbose": true
+    }
+  }
+}
+```
+
+**¿Cómo funciona?**
+1. Extrae las posiciones (bounding boxes) de las imágenes en el PDF
+2. Extrae el texto con coordenadas de cada página
+3. Identifica texto que está superpuesto o cercano a cada imagen
+4. Si la imagen parece un gráfico (por dimensiones) y hay números en el texto cercano, 
+   pero el OCR de la imagen detectó pocos números → es un gráfico compuesto
+5. Al analizar con IA, se incluye el texto extraído como contexto adicional
 
 ## 📖 Uso
 

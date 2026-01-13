@@ -1,11 +1,12 @@
 import os
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 import fitz  # PyMuPDF
 from PIL import Image
 from pptx import Presentation
 from models import ImageData, TextData, Config
 from image_filter import ImageFilter
+from composite_detector import CompositeChartDetector
 import json
 
 
@@ -25,6 +26,15 @@ class DocumentExtractor:
         else:
             self.image_filter = None
             print("⚠️  Filtro de imágenes deshabilitado")
+        
+        # Inicializar detector de gráficos compuestos
+        composite_config = self.config.extraction.get('composite_detection', {})
+        self.composite_enabled = composite_config.get('enabled', True)
+        if self.composite_enabled:
+            self.composite_detector = CompositeChartDetector(config_path)
+        else:
+            self.composite_detector = None
+            print("⚠️  Detección de gráficos compuestos deshabilitada")
     
     def _setup_directories(self):
         """Crea los directorios necesarios"""
@@ -135,9 +145,16 @@ class DocumentExtractor:
         else:
             raise ValueError(f"Formato no soportado: {ext}")
         
+        # Diccionario para almacenar resultados de OCR (útil para detección de composites)
+        ocr_results: Dict[str, int] = {}
+        
         # Aplicar filtro de imágenes si está habilitado
         if self.filter_enabled and self.image_filter and image_data:
             valuable_images, discarded_images = self.image_filter.filter_images(image_data)
+            
+            # Guardar resultados de OCR para las imágenes valiosas
+            # (el filtro ya hizo OCR, aprovechamos esa información)
+            ocr_results = self.image_filter.get_ocr_results()
             
             # Opcionalmente eliminar archivos de imágenes descartadas
             for img in discarded_images:
@@ -146,7 +163,15 @@ class DocumentExtractor:
                 except Exception as e:
                     print(f"  ⚠️  No se pudo eliminar {img.filename}: {e}")
             
-            return text_data, valuable_images
+            image_data = valuable_images
+        
+        # Detectar y enriquecer gráficos compuestos (solo para PDFs)
+        if self.composite_enabled and self.composite_detector and image_data and ext == '.pdf':
+            image_data = self.composite_detector.enrich_images_with_context(
+                image_data, 
+                file_path,
+                ocr_results
+            )
         
         return text_data, image_data
 

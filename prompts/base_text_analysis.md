@@ -59,7 +59,8 @@ Extrae la información en formato estructurado:
     "Hallazgo principal 1",
     "Hallazgo principal 2"
   ],
-  "keywords": ["palabras clave del texto"]
+  "keywords": ["palabras clave del texto"],
+  "relevance_score": 0.85
 }
 ```
 
@@ -102,3 +103,28 @@ Extrae la información en formato estructurado:
 - Identifica si hay información contradictoria o inconsistente
 - Señala si faltan datos importantes que deberían estar (ej: período sin especificar)
 - Conecta métricas relacionadas cuando sea posible
+
+## Evaluación de Relevancia (relevance_score)
+
+El campo `relevance_score` debe reflejar qué tan útil y valioso es el contenido del texto:
+
+**Score ALTO (0.7 - 1.0):**
+- Texto con métricas numéricas claras y específicas
+- Información cuantitativa relevante (porcentajes, valores, rankings)
+- Hallazgos o conclusiones accionables
+- Datos comparativos o tendencias
+
+**Score MEDIO (0.4 - 0.7):**
+- Texto descriptivo con algo de información útil
+- Contexto relevante pero sin datos duros
+- Información cualitativa importante
+
+**Score BAJO (0.0 - 0.4):**
+- Páginas de título, portada, índice
+- Texto puramente legal o boilerplate (disclaimers, copyrights)
+- Contenido genérico sin información específica
+- Texto corrupto, ilegible o con errores de extracción
+- Cuando el texto parece no corresponder al documento (errores de OCR)
+- Páginas de transición sin contenido sustantivo
+
+**IMPORTANTE**: Si el texto no contiene información analizable o parece ser ruido/error de extracción, usa `relevance_score: 0.1` o menor y NO generes insights forzados. Es preferible un array vacío de insights que insights inventados o irrelevantes.

@@ -6,9 +6,14 @@ from analyzer import DocumentAnalyzer
 from models import DocumentAnalysis
 
 
-def create_insights_summary(analysis: DocumentAnalysis, output_file: Path) -> Path:
+# Umbral mínimo de relevancia para incluir en el resumen de insights
+DEFAULT_RELEVANCE_THRESHOLD = 0.5
+
+
+def create_insights_summary(analysis: DocumentAnalysis, output_file: Path, relevance_threshold: float = DEFAULT_RELEVANCE_THRESHOLD) -> Path:
     """
     Crea un resumen breve de insights en formato Markdown.
+    Solo incluye insights con relevance_score >= threshold.
     Máximo 4 insights por gráfico y por página de texto analizado.
     """
     insights_file = output_file.parent / f"insights-{output_file.stem.replace('_analysis', '')}.md"
@@ -20,24 +25,31 @@ def create_insights_summary(analysis: DocumentAnalysis, output_file: Path) -> Pa
     
     has_insights = False
     
-    # Insights de gráficos/imágenes
+    # Insights de gráficos/imágenes (filtrados por relevancia)
     if analysis.chart_analysis:
-        chart_has_insights = any(chart.insights for chart in analysis.chart_analysis)
-        if chart_has_insights:
+        relevant_charts = [
+            chart for chart in analysis.chart_analysis 
+            if chart.insights and chart.relevance_score >= relevance_threshold
+        ]
+        
+        if relevant_charts:
             has_insights = True
             content += "## Insights de Gráficos\n\n"
             
-            for chart_idx, chart in enumerate(analysis.chart_analysis, 1):
-                if chart.insights:
-                    content += f"### {chart_idx}. {chart.title or 'Sin título'} ({chart.chart_data.type})\n\n"
-                    
-                    top_chart_insights = chart.insights[:4]
-                    for insight in top_chart_insights:
-                        content += f"- {insight}\n"
-                    content += "\n"
+            for chart_idx, chart in enumerate(relevant_charts, 1):
+                content += f"### {chart_idx}. {chart.title or 'Sin título'} ({chart.chart_data.type})\n\n"
+                
+                top_chart_insights = chart.insights[:4]
+                for insight in top_chart_insights:
+                    content += f"- {insight}\n"
+                content += "\n"
     
-    # Insights del análisis de texto con IA
-    text_pages_with_insights = [td for td in analysis.text_data if td.ai_analysis and td.ai_analysis.insights]
+    # Insights del análisis de texto con IA (filtrados por relevancia)
+    text_pages_with_insights = [
+        td for td in analysis.text_data 
+        if td.ai_analysis and td.ai_analysis.insights and td.ai_analysis.relevance_score >= relevance_threshold
+    ]
+    
     if text_pages_with_insights:
         has_insights = True
         content += "## Insights del Análisis de Texto\n\n"
@@ -51,7 +63,8 @@ def create_insights_summary(analysis: DocumentAnalysis, output_file: Path) -> Pa
             content += "\n"
     
     if not has_insights:
-        content += "_No se encontraron insights en el análisis._\n"
+        content += "_No se encontraron insights relevantes en el análisis._\n"
+        content += f"\n_Umbral de relevancia: {relevance_threshold}_\n"
     
     with open(insights_file, 'w', encoding='utf-8') as f:
         f.write(content)
@@ -117,9 +130,14 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     
     print(f"\n💾 Resultados guardados en: {output_file}")
     
-    # Crear resumen de insights
-    insights_file = create_insights_summary(analysis, output_file)
+    # Crear resumen de insights (con filtro de relevancia)
+    relevance_threshold = config.get('analysis', {}).get('relevance_threshold', DEFAULT_RELEVANCE_THRESHOLD)
+    insights_file = create_insights_summary(analysis, output_file, relevance_threshold)
     print(f"📄 Resumen de insights: {insights_file}")
+    
+    # Calcular estadísticas de relevancia
+    relevant_charts = [c for c in analysis.chart_analysis if c.relevance_score >= relevance_threshold]
+    relevant_text_pages = [t for t in analysis.text_data if t.ai_analysis and t.ai_analysis.relevance_score >= relevance_threshold]
     
     # Mostrar resumen
     print(f"\n{'='*60}")
@@ -127,7 +145,11 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     print(f"{'='*60}")
     print(f"Total páginas: {analysis.total_pages}")
     print(f"Imágenes extraídas: {len(analysis.image_data)}")
-    print(f"Gráficos analizados: {len(analysis.chart_analysis)}")
+    print(f"Gráficos analizados: {len(analysis.chart_analysis)} ({len(relevant_charts)} relevantes)")
+    if analyzer.text_analysis_enabled:
+        total_text_analyzed = len([t for t in analysis.text_data if t.ai_analysis])
+        print(f"Páginas de texto analizadas: {total_text_analyzed} ({len(relevant_text_pages)} relevantes)")
+    print(f"Umbral de relevancia: {relevance_threshold}")
     
     if analysis.chart_analysis:
         print(f"\nPrimeros insights encontrados:")

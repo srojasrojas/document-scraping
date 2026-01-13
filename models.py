@@ -20,6 +20,7 @@ class ChartAnalysisResult(BaseModel):
     values: List[float] = Field(default_factory=list, description="Valores numéricos")
     insights: List[str] = Field(default_factory=list, description="Insights clave")
     metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas calculadas")
+    relevance_score: float = Field(default=0.5, ge=0, le=1, description="Puntuación de relevancia (0-1). 0=sin valor, 1=muy relevante. Imágenes decorativas, logos o sin datos útiles deben tener score bajo.")
 
 
 class ChartData(BaseModel):
@@ -32,6 +33,7 @@ class ChartData(BaseModel):
     values: List[float] = Field(default_factory=list, description="Valores numéricos")
     insights: List[str] = Field(default_factory=list, description="Insights clave")
     metrics: Dict[str, Any] = Field(default_factory=dict, description="Métricas calculadas")
+    relevance_score: float = Field(default=0.5, ge=0, le=1, description="Puntuación de relevancia (0-1)")
 
 
 class TextAnalysis(BaseModel):
@@ -42,6 +44,7 @@ class TextAnalysis(BaseModel):
     entities: Dict[str, List[str]] = Field(default_factory=dict, description="Entidades (empresas, productos, personas)")
     insights: List[str] = Field(default_factory=list, description="Hallazgos principales")
     keywords: List[str] = Field(default_factory=list, description="Palabras clave")
+    relevance_score: float = Field(default=0.5, ge=0, le=1, description="Puntuación de relevancia (0-1). 0=sin valor/ruido, 1=muy relevante. Páginas sin contenido útil o con errores de extracción deben tener score bajo.")
 
 
 class TextData(BaseModel):
@@ -63,6 +66,10 @@ class ImageData(BaseModel):
     width: int
     height: int
     extracted_at: datetime = Field(default_factory=datetime.now)
+    # Campos para gráficos compuestos (imagen + texto renderizado separado)
+    bbox: Optional[List[float]] = Field(None, description="Bounding box [x0, y0, x1, y1] en coordenadas de página")
+    context_text: Optional[str] = Field(None, description="Texto cercano a la imagen (para gráficos compuestos)")
+    is_composite: bool = Field(False, description="True si se detectó como gráfico compuesto")
 
 
 class DocumentAnalysis(BaseModel):
