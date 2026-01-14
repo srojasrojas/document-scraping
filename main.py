@@ -1,7 +1,8 @@
 import json
 import argparse
 from pathlib import Path
-from typing import Literal
+from datetime import datetime
+from typing import Literal, List, Dict, Any
 from extractor import DocumentExtractor
 from analyzer import DocumentAnalyzer
 from models import DocumentAnalysis, InsightItem
@@ -9,15 +10,15 @@ from models import DocumentAnalysis, InsightItem
 
 # Umbral mínimo de relevancia para incluir en el resumen de insights
 DEFAULT_RELEVANCE_THRESHOLD = 0.5
-# Filtro de tipo de insight: "all", "findings", "hypotheses"
-DEFAULT_INSIGHT_FILTER = "all"
+# Filtro de tipo de insight: "all", "findings", "hypotheses", "actionable"
+DEFAULT_INSIGHT_FILTER = "actionable"
 
 
 def format_insight_text(insight: InsightItem, show_classification: bool = True) -> str:
     """Formatea un insight para mostrar en el resumen Markdown"""
     if show_classification:
-        icons = {"finding": "📊", "hypothesis": "💡", "observation": "📝"}
-        labels = {"finding": "Hallazgo", "hypothesis": "Hipótesis", "observation": "Observación"}
+        icons = {"finding": "📊", "hypothesis": "💡", "methodological_note": "📝"}
+        labels = {"finding": "Hallazgo", "hypothesis": "Hipótesis", "methodological_note": "Nota metodológica"}
         icon = icons.get(insight.classification, "💡")
         classification_label = labels.get(insight.classification, "Hipótesis")
         sample_info = f" (N={insight.sample_size})" if insight.sample_size else ""
@@ -29,11 +30,11 @@ def filter_insights_by_type(insights: list, insight_filter: str) -> list:
     """Filtra insights según el tipo especificado
     
     Opciones:
-    - 'all': Todos los insights (hallazgos + hipótesis + observaciones)
+    - 'all': Todos los insights (hallazgos + hipótesis + notas metodológicas)
     - 'findings': Solo hallazgos cuantitativos
     - 'hypotheses': Solo hipótesis exploratorias
-    - 'observations': Solo observaciones metodológicas/descriptivas
-    - 'actionable': Hallazgos + hipótesis (excluye observaciones)
+    - 'methodological_notes': Solo notas metodológicas/descriptivas
+    - 'actionable': Hallazgos + hipótesis (excluye notas metodológicas)
     """
     if insight_filter == "all":
         return insights
@@ -41,11 +42,130 @@ def filter_insights_by_type(insights: list, insight_filter: str) -> list:
         return [i for i in insights if i.classification == "finding"]
     elif insight_filter == "hypotheses":
         return [i for i in insights if i.classification == "hypothesis"]
-    elif insight_filter == "observations":
-        return [i for i in insights if i.classification == "observation"]
+    elif insight_filter == "methodological_notes":
+        return [i for i in insights if i.classification == "methodological_note"]
     elif insight_filter == "actionable":
         return [i for i in insights if i.classification in ("finding", "hypothesis")]
     return insights
+
+
+def save_ndjson(analysis: DocumentAnalysis, output_file: Path, source_file: str) -> Path:
+    """
+    Guarda el análisis en formato NDJSON con registros meta/claim/summary.
+    Un JSON por línea, sin markdown.
+    """
+    ndjson_file = output_file.with_suffix('.ndjson')
+    
+    # Recopilar todos los claims con IDs únicos
+    claims = []
+    claim_id = 1
+    
+    # Claims de gráficos/imágenes
+    for chart in analysis.chart_analysis:
+        for insight in chart.insights:
+            claims.append({
+                "type": "claim",
+                "id": f"C{claim_id:03d}",
+                "page_number": None,  # No tenemos página exacta para imágenes
+                "source": "chart",
+                "source_title": chart.title,
+                "classification": insight.classification,
+                "claim_text": insight.text,
+                "evidence": {
+                    "n": insight.sample_size,
+                    "data_type": insight.evidence_type or "unknown",
+                    "base_label": None
+                },
+                "theme_tags": insight.theme_tags,
+                "ambiguity_flags": insight.ambiguity_flags,
+                "classification_rationale": insight.classification_rationale,
+                "relevance_score": chart.relevance_score
+            })
+            claim_id += 1
+    
+    # Claims del análisis de texto
+    for td in analysis.text_data:
+        if td.ai_analysis and td.ai_analysis.insights:
+            for insight in td.ai_analysis.insights:
+                claims.append({
+                    "type": "claim",
+                    "id": f"C{claim_id:03d}",
+                    "page_number": td.page_number,
+                    "source": "text",
+                    "source_title": None,
+                    "classification": insight.classification,
+                    "claim_text": insight.text,
+                    "evidence": {
+                        "n": insight.sample_size,
+                        "data_type": insight.evidence_type or "unknown",
+                        "base_label": None
+                    },
+                    "theme_tags": insight.theme_tags,
+                    "ambiguity_flags": insight.ambiguity_flags,
+                    "classification_rationale": insight.classification_rationale,
+                    "relevance_score": td.ai_analysis.relevance_score
+                })
+                claim_id += 1
+    
+    # Contar por clasificación
+    counts = {
+        "total_claims": len(claims),
+        "findings": len([c for c in claims if c["classification"] == "finding"]),
+        "hypotheses": len([c for c in claims if c["classification"] == "hypothesis"]),
+        "methodological_notes": len([c for c in claims if c["classification"] == "methodological_note"])
+    }
+    
+    # Identificar hipótesis prioritarias para validar
+    top_hypotheses_to_validate = []
+    for c in claims:
+        if c["classification"] == "hypothesis" and not c["evidence"]["n"]:
+            top_hypotheses_to_validate.append({
+                "id": c["id"],
+                "why": "Sin N especificado",
+                "suggested_n": 100
+            })
+            if len(top_hypotheses_to_validate) >= 5:
+                break
+    
+    # Registro meta
+    meta_record = {
+        "type": "meta",
+        "study": {
+            "study_name": analysis.filename,
+            "source_file": source_file,
+            "report_date": None,  # Se podría extraer del documento
+            "method": None,
+            "sample_total_n": None
+        },
+        "extraction": {
+            "extraction_date": analysis.extraction_date.isoformat(),
+            "total_pages": analysis.total_pages,
+            "charts_analyzed": len(analysis.chart_analysis),
+            "images_extracted": len(analysis.image_data)
+        }
+    }
+    
+    # Registro summary
+    summary_record = {
+        "type": "summary",
+        "counts": counts,
+        "top_hypotheses_to_validate": top_hypotheses_to_validate,
+        "method_limitations": []
+    }
+    
+    # Escribir NDJSON
+    with open(ndjson_file, 'w', encoding='utf-8') as f:
+        # Línea 1: meta
+        f.write(json.dumps(meta_record, ensure_ascii=False) + '\n')
+        
+        # Líneas de claims
+        for claim in claims:
+            f.write(json.dumps(claim, ensure_ascii=False) + '\n')
+        
+        # Última línea: summary
+        f.write(json.dumps(summary_record, ensure_ascii=False) + '\n')
+    
+    return ndjson_file
 
 
 def create_insights_summary(
@@ -72,8 +192,8 @@ def create_insights_summary(
         "all": "Todos", 
         "findings": "Solo Hallazgos", 
         "hypotheses": "Solo Hipótesis",
-        "observations": "Solo Observaciones",
-        "actionable": "Hallazgos + Hipótesis (sin observaciones)"
+        "methodological_notes": "Solo Notas metodológicas",
+        "actionable": "Hallazgos + Hipótesis (sin notas metodológicas)"
     }
     content += f"**Filtro**: {filter_label.get(insight_filter, insight_filter)} | **Umbral relevancia**: {relevance_threshold}\n\n"
     content += "---\n\n"
@@ -82,7 +202,7 @@ def create_insights_summary(
     if show_classification:
         content += "> 📊 **Hallazgo**: Respaldado por datos cuantitativos (N alto)  \n"
         content += "> 💡 **Hipótesis**: Exploratorio o cualitativo (requiere validación)  \n"
-        content += "> 📝 **Observación**: Descripción metodológica/contextual\n\n"
+        content += "> 📝 **Nota metodológica**: Descripción metodológica/contextual\n\n"
     
     has_insights = False
     total_findings = 0
@@ -214,12 +334,12 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
         config = json.load(f)
     
     output_dir = Path(config['extraction']['output_dir']) / config['extraction']['data_dir']
-    output_file = output_dir / f"{Path(file_path).stem}_analysis.json"
+    output_file = output_dir / f"{Path(file_path).stem}_analysis.ndjson"
     
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(analysis.model_dump_json(indent=2, exclude_none=True))
+    # Guardar en formato NDJSON (meta/claim/summary)
+    ndjson_file = save_ndjson(analysis, output_file, file_path)
     
-    print(f"\n💾 Resultados guardados en: {output_file}")
+    print(f"\n💾 Resultados guardados en: {ndjson_file}")
     
     # Crear resumen de insights (con filtros de relevancia y tipo)
     relevance_threshold = config.get('analysis', {}).get('relevance_threshold', DEFAULT_RELEVANCE_THRESHOLD)
@@ -228,7 +348,7 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     
     insights_file = create_insights_summary(
         analysis, 
-        output_file, 
+        ndjson_file,  # Cambiado de output_file a ndjson_file
         relevance_threshold,
         insight_filter,
         show_classification
@@ -239,22 +359,27 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     relevant_charts = [c for c in analysis.chart_analysis if c.relevance_score >= relevance_threshold]
     relevant_text_pages = [t for t in analysis.text_data if t.ai_analysis and t.ai_analysis.relevance_score >= relevance_threshold]
     
-    # Contar hallazgos vs hipótesis
+    # Contar hallazgos vs hipótesis vs notas metodológicas
     total_findings = 0
     total_hypotheses = 0
+    total_methodological = 0
     for chart in analysis.chart_analysis:
         for insight in chart.insights:
             if insight.classification == "finding":
                 total_findings += 1
-            else:
+            elif insight.classification == "hypothesis":
                 total_hypotheses += 1
+            else:
+                total_methodological += 1
     for td in analysis.text_data:
         if td.ai_analysis:
             for insight in td.ai_analysis.insights:
                 if insight.classification == "finding":
                     total_findings += 1
-                else:
+                elif insight.classification == "hypothesis":
                     total_hypotheses += 1
+                else:
+                    total_methodological += 1
     
     # Mostrar resumen
     print(f"\n{'='*60}")
@@ -267,7 +392,7 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
         total_text_analyzed = len([t for t in analysis.text_data if t.ai_analysis])
         print(f"Páginas de texto analizadas: {total_text_analyzed} ({len(relevant_text_pages)} relevantes)")
     print(f"Umbral de relevancia: {relevance_threshold}")
-    print(f"📊 Hallazgos: {total_findings} | 💡 Hipótesis: {total_hypotheses}")
+    print(f"📊 Hallazgos: {total_findings} | 💡 Hipótesis: {total_hypotheses} | 📝 Notas: {total_methodological}")
     
     if analysis.chart_analysis:
         print(f"\nPrimeros insights encontrados:")
@@ -276,7 +401,8 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
             print(f"     Tipo: {chart.chart_data.type}")
             if chart.insights:
                 first_insight = chart.insights[0]
-                classification = "Hallazgo" if first_insight.classification == "finding" else "Hipótesis"
+                labels = {"finding": "Hallazgo", "hypothesis": "Hipótesis", "methodological_note": "Nota"}
+                classification = labels.get(first_insight.classification, "Hipótesis")
                 print(f"     [{classification}]: {first_insight.text[:80]}...")
     
     return analysis

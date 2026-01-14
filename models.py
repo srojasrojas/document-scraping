@@ -4,19 +4,32 @@ from datetime import datetime
 
 
 class InsightItem(BaseModel):
-    """Un insight individual con su clasificación como hallazgo, hipótesis u observación"""
-    text: str = Field(description="El texto del insight")
-    classification: Literal["finding", "hypothesis", "observation"] = Field(
+    """Un insight/claim individual con clasificación y metadatos para trazabilidad"""
+    text: str = Field(description="El texto del insight (paráfrasis fiel)")
+    classification: Literal["finding", "hypothesis", "methodological_note"] = Field(
         default="hypothesis", 
-        description="'finding' si está respaldado por datos cuantitativos con N alto (≥100), 'hypothesis' si es exploratorio/cualitativo, 'observation' si es descripción metodológica/contextual sin valor analítico"
+        description="'finding' si está respaldado por datos cuantitativos con N alto (≥100), 'hypothesis' si es exploratorio/cualitativo o N bajo, 'methodological_note' si es descripción metodológica/contextual"
     )
     sample_size: Optional[int] = Field(
         None, 
-        description="Tamaño de muestra (N) si se menciona o puede inferirse"
+        description="Tamaño de muestra (N) si se menciona o puede inferirse. No inventar."
     )
-    evidence_type: Optional[Literal["quantitative", "qualitative", "mixed"]] = Field(
+    evidence_type: Optional[Literal["quantitative", "qualitative", "mixed", "unknown"]] = Field(
         None, 
-        description="Tipo de evidencia: 'quantitative' (encuestas, datos estadísticos), 'qualitative' (focus groups, entrevistas), 'mixed'"
+        description="Tipo de evidencia: 'quantitative' (encuestas, datos estadísticos), 'qualitative' (focus groups, entrevistas), 'mixed', 'unknown'"
+    )
+    # Nuevos campos para trazabilidad y validación
+    ambiguity_flags: List[str] = Field(
+        default_factory=list,
+        description="Flags de ambigüedad: 'missing_base', 'low_n_referential', 'unspecified_method', 'inferred_n', etc."
+    )
+    theme_tags: List[str] = Field(
+        default_factory=list,
+        description="Tags temáticos: 'satisfacción', 'NPS', 'canales', 'tiempos', 'ranking', 'problemas', etc."
+    )
+    classification_rationale: Optional[str] = Field(
+        None,
+        description="Explicación breve de por qué se clasificó así (especialmente si es hipótesis por falta de N)"
     )
 
 

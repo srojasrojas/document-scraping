@@ -60,19 +60,28 @@ Extrae la información en formato estructurado:
       "text": "Descripción del hallazgo con datos cuantitativos",
       "classification": "finding",
       "sample_size": 500,
-      "evidence_type": "quantitative"
+      "evidence_type": "quantitative",
+      "ambiguity_flags": [],
+      "theme_tags": ["satisfacción", "NPS"],
+      "classification_rationale": null
     },
     {
       "text": "Observación exploratoria que requiere validación",
       "classification": "hypothesis",
       "sample_size": null,
-      "evidence_type": "qualitative"
+      "evidence_type": "qualitative",
+      "ambiguity_flags": ["missing_base"],
+      "theme_tags": ["canales"],
+      "classification_rationale": "Sin N especificado, basado en comentarios cualitativos"
     },
     {
       "text": "El estudio utiliza metodología X con alcance Y",
-      "classification": "observation",
+      "classification": "methodological_note",
       "sample_size": null,
-      "evidence_type": null
+      "evidence_type": null,
+      "ambiguity_flags": [],
+      "theme_tags": ["metodología"],
+      "classification_rationale": null
     }
   ],
   "keywords": ["palabras clave del texto"],
@@ -145,7 +154,7 @@ El campo `relevance_score` debe reflejar qué tan útil y valioso es el contenid
 
 **IMPORTANTE**: Si el texto no contiene información analizable o parece ser ruido/error de extracción, usa `relevance_score: 0.1` o menor y NO generes insights forzados. Es preferible un array vacío de insights que insights inventados o irrelevantes.
 
-## Clasificación de Insights: Hallazgos vs Hipótesis vs Observaciones
+## Clasificación de Insights: Hallazgos vs Hipótesis vs Notas Metodológicas
 
 Cada insight debe clasificarse en una de tres categorías:
 
@@ -165,31 +174,40 @@ Un insight se clasifica como `"hypothesis"` cuando:
 - No pretende generalización amplia
 - Incluye indicadores como: "Según entrevistas", "Los participantes mencionaron", "Se observó que"
 
-### OBSERVATION (Observación) 📝
-Un insight se clasifica como `"observation"` cuando:
+### METHODOLOGICAL_NOTE (Nota metodológica) 📝
+Un insight se clasifica como `"methodological_note"` cuando:
 - Es **información metodológica** o descriptiva del estudio (diseño, alcance, definiciones)
 - Describe **cómo se hizo el estudio**, no qué se encontró
 - Es **contexto del documento**: objetivos, estructura, marco teórico, descripciones de proceso
 - No contiene conclusiones ni interpretaciones de datos
 - Ejemplos:
-  - "El estudio abarca el período 2015-2025" → observation
-  - "La muestra incluye mayores de 18 años residentes en comunas urbanas" → observation
-  - "El informe busca fortalecer el enfoque hacia el cliente" → observation
-  - "El cuestionario mide satisfacción en escala de 1 a 7" → observation
+  - "El estudio abarca el período 2015-2025" → methodological_note
+  - "La muestra incluye mayores de 18 años residentes en comunas urbanas" → methodological_note
+  - "El informe busca fortalecer el enfoque hacia el cliente" → methodological_note
+  - "El cuestionario mide satisfacción en escala de 1 a 7" → methodological_note
 
-**IMPORTANTE**: Las observaciones tienen valor documental pero NO son insights accionables. Usa esta categoría para evitar inflar el conteo de hallazgos/hipótesis con información puramente descriptiva.
+**IMPORTANTE**: Las notas metodológicas tienen valor documental pero NO son insights accionables. Usa esta categoría para evitar inflar el conteo de hallazgos/hipótesis con información puramente descriptiva.
 
-### Regla por defecto
-- Si hay datos cuantitativos con N especificado → revisa si es **finding**
-- Si es interpretación sin N claro → **hypothesis**
-- Si describe metodología/contexto sin conclusiones → **observation**
+### Reglas de clasificación
+- Si hay datos cuantitativos con N ≥ 100 → **finding**
+- Si es interpretación sin N claro o N < 50 → **hypothesis** (y marcar en `ambiguity_flags`)
+- Si describe metodología/contexto sin conclusiones → **methodological_note**
+- **Regla por defecto**: Si falta N/base o método, clasificar como **hypothesis** y agregar flag `"missing_base"`
 
 ### Campos del insight
 ```json
 {
-  "text": "El texto descriptivo del insight",
-  "classification": "finding" | "hypothesis" | "observation",
+  "text": "El texto descriptivo del insight (paráfrasis fiel)",
+  "classification": "finding" | "hypothesis" | "methodological_note",
   "sample_size": número_o_null,
-  "evidence_type": "quantitative" | "qualitative" | "mixed" | null
+  "evidence_type": "quantitative" | "qualitative" | "mixed" | "unknown",
+  "ambiguity_flags": ["missing_base", "low_n_referential", "inferred_n"],
+  "theme_tags": ["satisfacción", "NPS", "canales", "tiempos", "ranking"],
+  "classification_rationale": "Sin N especificado, basado en comentarios cualitativos"
 }
 ```
+
+**Notas sobre campos adicionales:**
+- `ambiguity_flags`: Lista de flags cuando hay incertidumbre. Valores comunes: `"missing_base"`, `"low_n_referential"`, `"unspecified_method"`, `"inferred_n"`
+- `theme_tags`: Categorías temáticas del insight. Ejemplos: `"satisfacción"`, `"NPS"`, `"canales"`, `"tiempos"`, `"ranking"`, `"problemas"`, `"información"`
+- `classification_rationale`: Explicación breve de por qué se eligió esa clasificación (especialmente importante para hipótesis)
