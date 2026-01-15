@@ -1,5 +1,6 @@
 import json
 import argparse
+import glob
 from pathlib import Path
 from datetime import datetime
 from typing import Literal, List, Dict, Any
@@ -484,12 +485,30 @@ Ejemplos:
         print(f"❌ Error: El archivo de configuración '{args.config}' no existe")
         return
     
+    # Expandir wildcards (*.pdf) si es necesario
+    all_files = []
+    for pattern in args.file:
+        if '*' in pattern or '?' in pattern:
+            # Es un wildcard, expandir
+            expanded = glob.glob(pattern)
+            if expanded:
+                all_files.extend(expanded)
+            else:
+                print(f"⚠️  No se encontraron archivos que coincidan con: {pattern}")
+        else:
+            # Es un archivo específico
+            all_files.append(pattern)
+    
+    if not all_files:
+        print("❌ Error: No se especificaron archivos válidos para procesar")
+        return
+    
     # Procesar cada archivo
-    total_files = len(args.file)
+    total_files = len(all_files)
     successful = 0
     failed = 0
     
-    for idx, file_path in enumerate(args.file, 1):
+    for idx, file_path in enumerate(all_files, 1):
         if not Path(file_path).exists():
             print(f"\n⚠️  [{idx}/{total_files}] Archivo no encontrado: {file_path}")
             failed += 1
