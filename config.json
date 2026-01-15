@@ -43,6 +43,7 @@
     "insight_filter": "actionable",
     "show_insight_classification": true,
     "output_format": "ndjson",
+    "export_docx": false,
     "anthropic_api_key": null,
     "openai_api_key": null
   },

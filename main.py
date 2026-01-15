@@ -7,6 +7,13 @@ from extractor import DocumentExtractor
 from analyzer import DocumentAnalyzer
 from models import DocumentAnalysis, InsightItem
 
+# Importar exportador DOCX (opcional)
+try:
+    from docx_exporter import export_to_docx
+    DOCX_EXPORT_AVAILABLE = True
+except ImportError:
+    DOCX_EXPORT_AVAILABLE = False
+
 
 # Umbral mínimo de relevancia para incluir en el resumen de insights
 DEFAULT_RELEVANCE_THRESHOLD = 0.5
@@ -283,7 +290,7 @@ def create_insights_summary(
     return insights_file
 
 
-def process_document(file_path: str, config_path: str = "config.json", domain_prompts_file: str = None) -> DocumentAnalysis:
+def process_document(file_path: str, config_path: str = "config.json", domain_prompts_file: str = None, export_docx: bool = False) -> DocumentAnalysis:
     """
     Procesa un documento completo:
     1. Extrae texto e imágenes
@@ -354,6 +361,17 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
         show_classification
     )
     print(f"📄 Resumen de insights: {insights_file}")
+    
+    # Exportar a DOCX si está habilitado (por config o argumento CLI)
+    export_docx_enabled = export_docx or config.get('analysis', {}).get('export_docx', False)
+    if export_docx_enabled and DOCX_EXPORT_AVAILABLE:
+        try:
+            docx_file = export_to_docx(ndjson_file)
+            print(f"📑 Tabla Word exportada: {docx_file}")
+        except Exception as e:
+            print(f"⚠️  Error exportando DOCX: {e}")
+    elif export_docx_enabled and not DOCX_EXPORT_AVAILABLE:
+        print("⚠️  Exportación DOCX no disponible. Instala: pip install python-docx")
     
     # Calcular estadísticas de relevancia y clasificación
     relevant_charts = [c for c in analysis.chart_analysis if c.relevance_score >= relevance_threshold]
@@ -452,6 +470,11 @@ Ejemplos:
         dest="domain_prompts",
         help="Nombre del archivo de prompts específicos del dominio (ej: afp_chile). Se busca en prompts/domains/"
     )
+    parser.add_argument(
+        "--export-docx",
+        action="store_true",
+        help="Exportar también a tabla Word (.docx)"
+    )
     
     args = parser.parse_args()
     
@@ -466,7 +489,12 @@ Ejemplos:
         return
     
     try:
-        analysis = process_document(args.file, args.config, domain_prompts_file=args.domain_prompts)
+        analysis = process_document(
+            args.file, 
+            args.config, 
+            domain_prompts_file=args.domain_prompts,
+            export_docx=args.export_docx
+        )
         print(f"\n✅ Proceso completado exitosamente")
     except Exception as e:
         print(f"\n❌ Error durante el procesamiento: {e}")

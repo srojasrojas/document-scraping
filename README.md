@@ -253,6 +253,9 @@ Opciones:
   --domain-prompts NOMBRE  Nombre del archivo de prompts de dominio
                           Se busca en prompts/domains/
                           Ejemplo: afp_chile (busca afp_chile.md)
+  
+  --export-docx            Exportar también a tabla Word (.docx)
+                          Genera un inventario de conclusiones en formato tabla
 ```
 
 ### Crear Contexto de Dominio Personalizado
@@ -326,46 +329,53 @@ Ver [prompts/README.md](prompts/README.md) para guías detalladas.
     ├── images/                    # Imágenes extraídas y filtradas
     ├── text/                      # Texto extraído por página
     └── data/                      # Análisis completo
-        ├── documento_analysis.json         # Datos completos sin filtrado
+        ├── documento_analysis.ndjson       # Claims en formato NDJSON
+        ├── documento_analysis.docx         # Tabla Word (opcional)
         └── insights-documento.md           # Resumen legible filtrado
 ```
 
 ## 🔍 Ejemplo de Salida
 
-El sistema genera dos tipos de archivos:
+El sistema genera tres tipos de archivos:
 
-### 1. JSON Completo (sin filtrado)
+### 1. NDJSON (datos estructurados)
 
-Todos los datos extraídos y analizados, incluyendo:
+Un JSON por línea con registros meta/claim/summary:
 
-```json
-{
-  "filename": "documento.pdf",
-  "total_pages": 50,
-  "extraction_date": "2025-12-30T10:30:00",
-  "text_data": [...],
-  "image_data": [...],
-  "chart_analysis": [
-    {
-      "chart_type": "bar",
-      "title": "Evolución de Imagen",
-      "categories": ["Habitat", "Cuprum", "Modelo"],
-      "values": [26, 10, 23],
-      "insights": [
-        {
-          "text": "Habitat lidera con 26% de participación",
-          "classification": "finding",
-          "sample_size": 1200,
-          "evidence_type": "quantitative"
-        }
-      ],
-      "relevance_score": 0.85
-    }
-  ]
+```ndjson
+{"type":"meta","study":{"study_name":"documento.pdf","report_date":null},"extraction":{...}}
+{"type":"claim","id":"C001","page_number":5,"classification":"finding","claim_text":"...","evidence":{...}}
+{"type":"claim","id":"C002","page_number":5,"classification":"hypothesis","claim_text":"...","evidence":{...}}
+{"type":"summary","counts":{"findings":8,"hypotheses":15,"methodological_notes":2},...}
+```
+
+Cada claim incluye:
+- `id`: Identificador único (C001, C002...)
+- `classification`: `"finding"` | `"hypothesis"` | `"methodological_note"`
+- `evidence`: `{n, data_type, base_label}`
+- `theme_tags`: Etiquetas temáticas
+- `ambiguity_flags`: Indicadores de limitaciones (missing_base, low_n_referential, etc.)
+
+### 2. Tabla Word (.docx) - Opcional
+
+Tabla estructurada para inventario de conclusiones:
+
+| ID | Página | Fecha | Estudio | Tipo | Conclusión | Datos (N) | Evidencia / limitaciones |
+|----|--------|-------|---------|------|------------|-----------|--------------------------|
+| C001 | p.5 | 2025-01-13 | documento.pdf | Hallazgo | Satisfacción neta de 68 puntos | N=1260; Cuantitativo | Relevancia: 0.85 |
+
+Para habilitar:
+```bash
+# Por línea de comandos
+python main.py documento.pdf --export-docx
+
+# O en config.json
+"analysis": {
+  "export_docx": true
 }
 ```
 
-### 2. Resumen Markdown (filtrado)
+### 3. Resumen Markdown (filtrado)
 
 Archivo legible para humanos con insights filtrados:
 
