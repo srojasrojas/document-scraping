@@ -458,7 +458,8 @@ Ejemplos:
     )
     parser.add_argument(
         "file",
-        help="Ruta al archivo PDF o PPTX a procesar"
+        nargs='+',
+        help="Ruta(s) al archivo(s) PDF o PPTX a procesar. Acepta múltiples archivos o wildcards (*.pdf)"
     )
     parser.add_argument(
         "--config",
@@ -478,29 +479,50 @@ Ejemplos:
     
     args = parser.parse_args()
     
-    # Validar archivo
-    if not Path(args.file).exists():
-        print(f"❌ Error: El archivo '{args.file}' no existe")
-        return
-    
     # Validar configuración
     if not Path(args.config).exists():
         print(f"❌ Error: El archivo de configuración '{args.config}' no existe")
         return
     
-    try:
-        analysis = process_document(
-            args.file, 
-            args.config, 
-            domain_prompts_file=args.domain_prompts,
-            export_docx=args.export_docx
-        )
-        print(f"\n✅ Proceso completado exitosamente")
-    except Exception as e:
-        print(f"\n❌ Error durante el procesamiento: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+    # Procesar cada archivo
+    total_files = len(args.file)
+    successful = 0
+    failed = 0
+    
+    for idx, file_path in enumerate(args.file, 1):
+        if not Path(file_path).exists():
+            print(f"\n⚠️  [{idx}/{total_files}] Archivo no encontrado: {file_path}")
+            failed += 1
+            continue
+        
+        try:
+            if total_files > 1:
+                print(f"\n{'='*60}")
+                print(f"Procesando archivo {idx}/{total_files}")
+                print(f"{'='*60}")
+            
+            analysis = process_document(
+                file_path, 
+                args.config, 
+                domain_prompts_file=args.domain_prompts,
+                export_docx=args.export_docx
+            )
+            successful += 1
+            
+        except Exception as e:
+            print(f"\n❌ Error procesando {file_path}: {e}")
+            import traceback
+            traceback.print_exc()
+            failed += 1
+            continue
+    
+    # Resumen final
+    print(f"\n{'='*60}")
+    print(f"RESUMEN FINAL: {successful} exitosos | {failed} fallidos de {total_files} archivos")
+    print(f"{'='*60}")
+    
+    if failed > 0:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
