@@ -23,6 +23,32 @@ Eres un analista experto en extraer información estructurada de texto provenien
 - **Estrategias**: Iniciativas, planes, objetivos declarados
 - **Drivers**: Factores que explican resultados
 
+### 3.1. ⚠️ CRÍTICO: Manejo de Indicadores Netos y Signos
+
+**REGLA FUNDAMENTAL**: Respeta EXACTAMENTE los signos (+ o -) tal como aparecen en el texto.
+
+**Indicadores Netos** (NPS, Satisfacción Neta, etc.):
+- Fórmula común: **Neto = % Positivo - % Negativo**
+- Ejemplo texto: "NPS de -18" → Reporta "-18" (negativo indica más detractores que promotores)
+- Ejemplo texto: "Satisfacción neta +42" → Reporta "+42" (positivo indica más satisfechos)
+
+**Interpretación de signos**:
+- **Positivo (+)**: Predomina el sentimiento favorable
+- **Negativo (-)**: Predomina el sentimiento desfavorable
+- **"Tendencia negativa"** = valores que bajan o son negativos
+- **"Tendencia positiva"** = valores que suben o son positivos
+
+**NUNCA INVIERTAS EL SIGNO**:
+- Si el texto dice "NPS de -18", NO escribas "+18"
+- Si el texto dice "satisfacción neta de +64%", NO escribas "-64%"
+- Si menciona "balance negativo", mantén el signo negativo
+- Si menciona "resultado positivo", mantén el signo positivo
+
+**Casos ambiguos**:
+- "60% promotores, 78% detractores" → Calcula: 60-78 = **-18** (negativo)
+- "Insatisfacción neta de 25%" → Es **negativo** aunque no tenga signo explícito
+- "Satisfacción neta de 25%" → Es **positivo** aunque no tenga signo explícito
+
 ### 4. Entidades Relevantes
 - **Empresas**: Competidores, socios, clientes mencionados
 - **Productos/Servicios**: Ofertas específicas mencionadas
@@ -161,10 +187,11 @@ Cada insight debe clasificarse en una de tres categorías:
 ### FINDING (Hallazgo) 📊
 Un insight se clasifica como `"finding"` cuando:
 - Está respaldado por **datos cuantitativos** con tamaño de muestra alto (N ≥ 100)
-- Proviene de **encuestas representativas**, datos estadísticos o métricas consolidadas
+- Proviene de **encuestas representativas**, datos estadísticos, métricas consolidadas o **bases de datos administrativas/transaccionales**
 - Tiene **evidencia estadística clara** mencionada en el texto
-- Permite **generalización** con confianza estadística
-- Incluye indicadores como: "Base: 500 casos", "n=1200", "Muestra de 350 encuestados"
+- Permite **generalización** con confianza estadística o describe **población completa**
+- Incluye indicadores como: "Base: 500 casos", "n=1200", "Muestra de 350 encuestados", "441,881 afiliados", "registros de clientes"
+- **IMPORTANTE**: Datos de bases administrativas completas (ej: "280,546 clientes del segmento") son **findings** aunque no provengan de encuesta, ya que representan la población real, no una muestra
 
 ### HYPOTHESIS (Hipótesis) 💡
 Un insight se clasifica como `"hypothesis"` cuando:
@@ -179,20 +206,33 @@ Un insight se clasifica como `"methodological_note"` cuando:
 - Es **información metodológica** o descriptiva del estudio (diseño, alcance, definiciones)
 - Describe **cómo se hizo el estudio**, no qué se encontró
 - Es **contexto del documento**: objetivos, estructura, marco teórico, descripciones de proceso
-- No contiene conclusiones ni interpretaciones de datos
+- Incluye **características de la muestra** sin reportar resultados: tamaño, cobertura, error muestral, criterios de selección
+- No contiene conclusiones, resultados ni interpretaciones de datos
 - Ejemplos:
   - "El estudio abarca el período 2015-2025" → methodological_note
+  - "La muestra total fue de 180 casos, con cobertura del 7% del universo" → methodological_note
   - "La muestra incluye mayores de 18 años residentes en comunas urbanas" → methodological_note
   - "El informe busca fortalecer el enfoque hacia el cliente" → methodological_note
   - "El cuestionario mide satisfacción en escala de 1 a 7" → methodological_note
+  - "El error muestral es de ±2.8% con 95% de confianza" → methodological_note
+  - "Se realizaron 6 focus groups en tres comunas" → methodological_note
 
-**IMPORTANTE**: Las notas metodológicas tienen valor documental pero NO son insights accionables. Usa esta categoría para evitar inflar el conteo de hallazgos/hipótesis con información puramente descriptiva.
+**IMPORTANTE**: Las notas metodológicas tienen valor documental pero NO son insights accionables. Usa esta categoría para evitar inflar el conteo de hallazgos/hipótesis con información puramente descriptiva sobre el diseño del estudio.
 
 ### Reglas de clasificación
-- Si hay datos cuantitativos con N ≥ 100 → **finding**
+
+**DECISIÓN 1: ¿Es información sobre el diseño del estudio o resultados?**
+- Si describe cómo se hizo el estudio (muestra, período, método, alcance) → **methodological_note**
+- Si reporta resultados, conclusiones o patrones encontrados → Continúa a Decisión 2
+
+**DECISIÓN 2: ¿Tiene respaldo cuantitativo suficiente?**
+- Si hay datos cuantitativos con N ≥ 100 (de encuestas, bases administrativas, transacciones o registros) → **finding**
+- **CRÍTICO**: Datos administrativos/transaccionales con N explícito (ej: "441,881 clientes", "280,546 afiliados") son **findings**, NO hipótesis
 - Si es interpretación sin N claro o N < 50 → **hypothesis** (y marcar en `ambiguity_flags`)
-- Si describe metodología/contexto sin conclusiones → **methodological_note**
-- **Regla por defecto**: Si falta N/base o método, clasificar como **hypothesis** y agregar flag `"missing_base"`
+
+**Regla por defecto**: Si falta N/base o método, clasificar como **hypothesis** y agregar flag `"missing_base"`
+
+**CRITERIO CRÍTICO**: Si el texto NO reporta un resultado sino que describe características del estudio (quién, cuándo, cómo, dónde se hizo), SIEMPRE es **methodological_note**, independientemente de si menciona números.
 
 ### Campos del insight
 ```json
@@ -204,6 +244,60 @@ Un insight se clasifica como `"methodological_note"` cuando:
   "ambiguity_flags": ["missing_base", "low_n_referential", "inferred_n"],
   "theme_tags": ["satisfacción", "NPS", "canales", "tiempos", "ranking"],
   "classification_rationale": "Sin N especificado, basado en comentarios cualitativos"
+}
+```
+
+### Ejemplos de Clasificación
+
+**FINDING - Encuesta:**
+```json
+{
+  "text": "El 68% de los encuestados reporta satisfacción con el servicio (N=1260)",
+  "classification": "finding",
+  "sample_size": 1260,
+  "evidence_type": "quantitative",
+  "ambiguity_flags": [],
+  "theme_tags": ["satisfacción"],
+  "classification_rationale": null
+}
+```
+
+**FINDING - Datos administrativos/transaccionales:**
+```json
+{
+  "text": "El segmento Inversionistas auto-dirigidos representa 22% con 441,881 afiliados, edad promedio 41 años y 53% hombres",
+  "classification": "finding",
+  "sample_size": 441881,
+  "evidence_type": "quantitative",
+  "ambiguity_flags": [],
+  "theme_tags": ["segmentación", "demografía"],
+  "classification_rationale": null
+}
+```
+
+**HYPOTHESIS - Cualitativa sin N:**
+```json
+{
+  "text": "Los usuarios perciben el proceso como confuso según entrevistas",
+  "classification": "hypothesis",
+  "sample_size": null,
+  "evidence_type": "qualitative",
+  "ambiguity_flags": ["missing_base"],
+  "theme_tags": ["usabilidad"],
+  "classification_rationale": "Basado en comentarios cualitativos sin N especificado"
+}
+```
+
+**METHODOLOGICAL_NOTE - Descripción del estudio:**
+```json
+{
+  "text": "El estudio se realizó entre enero y marzo de 2024 con muestra de 180 casos",
+  "classification": "methodological_note",
+  "sample_size": null,
+  "evidence_type": null,
+  "ambiguity_flags": [],
+  "theme_tags": ["metodología"],
+  "classification_rationale": null
 }
 ```
 

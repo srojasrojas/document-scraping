@@ -6,3 +6,4 @@ python-docx>=1.1.0
 Pillow>=10.0.0
 anthropic>=0.40.0
 pytesseract>=0.3.10
+comtypes>=1.2.0; sys_platform == 'win32'  # Para conversión PPTX con PowerPoint (Windows)

@@ -139,9 +139,12 @@ def save_ndjson(analysis: DocumentAnalysis, output_file: Path, source_file: str)
     meta_record = {
         "type": "meta",
         "study": {
-            "study_name": analysis.filename,
+            "study_name": analysis.metadata.study_name if analysis.metadata else analysis.filename,
             "source_file": source_file,
-            "report_date": None,  # Se podría extraer del documento
+            "study_year": analysis.metadata.study_year if analysis.metadata else None,
+            "company": analysis.metadata.company if analysis.metadata else None,
+            "report_type": analysis.metadata.report_type if analysis.metadata else None,
+            "report_date": None,
             "method": None,
             "sample_total_n": None
         },
@@ -192,7 +195,21 @@ def create_insights_summary(
     insights_file = output_file.parent / f"insights-{output_file.stem.replace('_analysis', '')}.md"
     
     content = f"# Insights - {analysis.filename}\n\n"
-    content += f"**Fecha de análisis**: {analysis.extraction_date.strftime('%Y-%m-%d %H:%M')}\n\n"
+    
+    # Agregar metadata al inicio
+    if analysis.metadata:
+        content += "## Metadata del Documento\n\n"
+        if analysis.metadata.study_year:
+            content += f"**Año del estudio**: {analysis.metadata.study_year}  \n"
+        if analysis.metadata.study_name:
+            content += f"**Nombre**: {analysis.metadata.study_name}  \n"
+        if analysis.metadata.company:
+            content += f"**Empresa**: {analysis.metadata.company}  \n"
+        if analysis.metadata.report_type:
+            content += f"**Tipo**: {analysis.metadata.report_type}  \n"
+        content += "\n"
+    
+    content += f"**Fecha de análisis**: {analysis.extraction_date.strftime('%Y-%m-%d %H:%M')}  \n"
     content += f"**Total páginas**: {analysis.total_pages} | **Gráficos analizados**: {len(analysis.chart_analysis)}\n\n"
     
     # Mostrar filtros aplicados
@@ -205,12 +222,6 @@ def create_insights_summary(
     }
     content += f"**Filtro**: {filter_label.get(insight_filter, insight_filter)} | **Umbral relevancia**: {relevance_threshold}\n\n"
     content += "---\n\n"
-    
-    # Leyenda de clasificación
-    if show_classification:
-        content += "> 📊 **Hallazgo**: Respaldado por datos cuantitativos (N alto)  \n"
-        content += "> 💡 **Hipótesis**: Exploratorio o cualitativo (requiere validación)  \n"
-        content += "> 📝 **Nota metodológica**: Descripción metodológica/contextual\n\n"
     
     has_insights = False
     total_findings = 0
@@ -280,10 +291,18 @@ def create_insights_summary(
     # Resumen de clasificación
     if has_insights:
         content += "---\n\n"
-        content += f"**Resumen**: {total_findings} hallazgos | {total_hypotheses} hipótesis\n"
+        content += f"**Resumen**: {total_findings} hallazgos | {total_hypotheses} hipótesis\n\n"
     else:
         content += "_No se encontraron insights relevantes en el análisis._\n"
-        content += f"\n_Umbral de relevancia: {relevance_threshold}_\n"
+        content += f"\n_Umbral de relevancia: {relevance_threshold}_\n\n"
+    
+    # Leyenda de clasificación al final
+    if show_classification:
+        content += "---\n\n"
+        content += "### Leyenda de Clasificación\n\n"
+        content += "> 📊 **Hallazgo**: Respaldado por datos cuantitativos (N alto)  \n"
+        content += "> 💡 **Hipótesis**: Exploratorio o cualitativo (requiere validación)  \n"
+        content += "> 📝 **Nota metodológica**: Descripción metodológica/contextual\n"
     
     with open(insights_file, 'w', encoding='utf-8') as f:
         f.write(content)
@@ -294,12 +313,38 @@ def create_insights_summary(
 def process_document(file_path: str, config_path: str = "config.json", domain_prompts_file: str = None, export_docx: bool = False) -> DocumentAnalysis:
     """
     Procesa un documento completo:
-    1. Extrae texto e imágenes
-    2. Analiza gráficos con IA (Claude o OpenAI)
-    3. Guarda resultados
+    1. Auto-convierte PPTX a PDF si es necesario
+    2. Extrae texto e imágenes
+    3. Analiza gráficos con IA (Claude o OpenAI)
+    4. Guarda resultados
     """
+    original_path = file_path
+    ext = Path(file_path).suffix.lower()
+    temp_pdf_created = False
+    
+    # Auto-convertir PPTX a PDF
+    if ext in ['.ppt', '.pptx']:
+        print(f"\n🔄 Detectado PowerPoint, convirtiendo a PDF...")
+        from pptx_converter import convert_pptx_to_pdf
+        
+        # Cargar configuración para temp_dir
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+        temp_dir = Path(config.get('extraction', {}).get('pptx_conversion', {}).get('temp_dir', 'output/temp_pdfs'))
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            file_path = convert_pptx_to_pdf(file_path, str(temp_dir), config_path)
+            temp_pdf_created = True
+            print(f"   ✓ Convertido a: {file_path}\n")
+        except Exception as e:
+            print(f"   ❌ Error en conversión: {e}")
+            raise
+    
     print(f"\n{'='*60}")
-    print(f"Procesando: {file_path}")
+    print(f"Procesando: {original_path}")
+    if temp_pdf_created:
+        print(f"(Convertido a: {Path(file_path).name})")
     print(f"{'='*60}\n")
     
     # Paso 1: Extracción
@@ -317,6 +362,10 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     text_data = analyzer.extract_text_metrics(text_data)
     print(f"   ✓ Métricas extraídas del texto (regex)")
     
+    # Extraer metadata del documento
+    print(f"\n📋 Extrayendo metadata...")
+    metadata = analyzer.extract_metadata(Path(original_path).name, text_data)
+    
     # Análisis de texto con IA (si está habilitado)
     if analyzer.text_analysis_enabled:
         text_data = analyzer.analyze_text_with_ai(text_data)
@@ -324,14 +373,15 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     # Analizar imágenes
     chart_analysis = []
     if image_data:
-        print(f"   → Analizando {len(image_data)} gráficos/tablas con IA...")
+        print(f"\n   → Analizando {len(image_data)} gráficos/tablas con IA...")
         chart_analysis = analyzer.analyze_all_images(image_data)
         print(f"   ✓ {len(chart_analysis)} visualizaciones analizadas")
     
     # Paso 3: Crear análisis completo
     analysis = DocumentAnalysis(
-        filename=Path(file_path).name,
+        filename=Path(original_path).name,
         total_pages=len(text_data),
+        metadata=metadata,
         text_data=text_data,
         image_data=image_data,
         chart_analysis=chart_analysis
