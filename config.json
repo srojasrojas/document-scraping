@@ -4,7 +4,7 @@
     "images_dir": "images",
     "text_dir": "text",
     "data_dir": "data",
-    "supported_formats": [".pdf"],
+    "supported_formats": [".pdf", ".pptx", ".ppt"],
     "image_dpi": 200,
     "image_format": "png",
     "image_filter": {
@@ -33,6 +33,13 @@
       "min_nearby_numbers": 3,
       "ocr_number_threshold": 2,
       "verbose": true
+    },
+    "pptx_conversion": {
+      "enabled": true,
+      "backend": "auto",
+      "dpi": 300,
+      "delete_temp_pdf": false,
+      "temp_dir": "output/temp_pdfs"
     }
   },
   "analysis": {

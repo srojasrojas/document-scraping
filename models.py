@@ -102,11 +102,20 @@ class ImageData(BaseModel):
     is_composite: bool = Field(False, description="True si se detectó como gráfico compuesto")
 
 
+class DocumentMetadata(BaseModel):
+    """Metadata extraída del documento"""
+    study_year: Optional[int] = Field(None, description="Año del estudio/documento")
+    study_name: Optional[str] = Field(None, description="Nombre del estudio/documento")
+    company: Optional[str] = Field(None, description="Empresa a cargo del estudio")
+    report_type: Optional[str] = Field(None, description="Tipo de reporte (ej: informe, presentación)")
+
+
 class DocumentAnalysis(BaseModel):
     """Análisis completo de un documento"""
     filename: str
     total_pages: int
     extraction_date: datetime = Field(default_factory=datetime.now)
+    metadata: Optional[DocumentMetadata] = Field(None, description="Metadata extraída del documento")
     text_data: List[TextData] = Field(default_factory=list)
     image_data: List[ImageData] = Field(default_factory=list)
     chart_analysis: List[ChartData] = Field(default_factory=list)

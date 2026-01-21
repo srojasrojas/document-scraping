@@ -72,6 +72,32 @@ Identifica patrones significativos:
 - **Proporciones**: En gráficos de pie, ¿cuáles son las proporciones principales?
 - **Outliers**: ¿Hay valores atípicos o inusuales?
 
+### 4.1. ⚠️ CRÍTICO: Manejo de Indicadores Netos y Signos
+
+**REGLA FUNDAMENTAL**: Respeta EXACTAMENTE los signos (+ o -) tal como aparecen en el gráfico/tabla.
+
+**Indicadores Netos** (frecuentes en encuestas de satisfacción):
+- Fórmula: **Neto = % Positivo - % Negativo**
+- Ejemplo: 60% satisfechos - 40% insatisfechos = +20 puntos netos
+- Ejemplo: 30% satisfechos - 50% insatisfechos = -20 puntos netos
+
+**Interpretación de signos**:
+- **Positivo (+)**: Predomina la satisfacción/favorable
+- **Negativo (-)**: Predomina la insatisfacción/desfavorable
+- **Cero o cercano a 0**: Balance neutro
+
+**NUNCA INVIERTAS EL SIGNO**:
+- Si el gráfico muestra "-18", escribe "-18" (NO "+18")
+- Si el gráfico muestra "+42", escribe "+42" (NO "-42")
+- Si hay barras hacia la izquierda o hacia abajo = valores negativos
+- Si hay barras hacia la derecha o hacia arriba = valores positivos
+
+**Verificación doble**:
+Antes de reportar un indicador neto, pregúntate:
+1. ¿El valor original tenía signo negativo? → Mantén el negativo
+2. ¿La descripción dice "insatisfacción" o "detractores"? → Probablemente negativo
+3. ¿La escala del eje cruza el cero? → Respeta qué lado del cero está cada valor
+
 ### 5. Cálculo de Métricas
 Cuando sea relevante, calcula:
 - **Promedios**: Media de cada serie
@@ -224,16 +250,30 @@ Un insight se clasifica como `"methodological_note"` cuando:
 - Es **información metodológica** o descriptiva del estudio (diseño, alcance, definiciones)
 - Describe **cómo se hizo el estudio**, no qué se encontró
 - Es **contexto del documento**: objetivos, estructura, marco teórico
-- No contiene conclusiones ni interpretaciones de datos
-- Ejemplos: "El estudio abarca 2015-2025", "La muestra incluye mayores de 18 años", "El benchmark considera 5 indicadores"
+- Incluye **características de la muestra** sin reportar resultados: tamaño, cobertura, error muestral
+- No contiene conclusiones, resultados ni interpretaciones de datos
+- Ejemplos: 
+  - "El estudio abarca 2015-2025" → methodological_note
+  - "La muestra incluye mayores de 18 años" → methodological_note
+  - "Base total: 1,260 casos con error de ±2.8%" → methodological_note
+  - "El benchmark considera 5 indicadores" → methodological_note
+  - "Se realizaron entrevistas en 3 regiones" → methodological_note
 
-**IMPORTANTE**: Las notas metodológicas tienen valor documental pero NO son insights accionables. Usa esta categoría para evitar inflar el conteo de hallazgos/hipótesis con información puramente descriptiva.
+**IMPORTANTE**: Las notas metodológicas tienen valor documental pero NO son insights accionables. Usa esta categoría para evitar inflar el conteo de hallazgos/hipótesis con información puramente descriptiva sobre el diseño del estudio.
 
 ### Reglas de clasificación
+
+**DECISIÓN 1: ¿Es información sobre el diseño del estudio o resultados?**
+- Si describe cómo se hizo el estudio (muestra, período, método, alcance) → **methodological_note**
+- Si reporta resultados, conclusiones o patrones encontrados → Continúa a Decisión 2
+
+**DECISIÓN 2: ¿Tiene respaldo cuantitativo suficiente?**
 - Si hay datos cuantitativos con N ≥ 100 → **finding**
 - Si es interpretación sin N claro o N < 50 → **hypothesis** (y marcar en `ambiguity_flags`)
-- Si describe metodología/contexto sin conclusiones → **methodological_note**
-- **Regla por defecto**: Si falta N/base o método, clasificar como **hypothesis** y agregar flag `"missing_base"`
+
+**Regla por defecto**: Si falta N/base o método, clasificar como **hypothesis** y agregar flag `"missing_base"`
+
+**CRITERIO CRÍTICO**: Si el gráfico/tabla muestra características del estudio (cobertura, distribución de la muestra, error muestral) en lugar de resultados, es **methodological_note**, no hallazgo.
 
 ### Campos del insight
 ```json

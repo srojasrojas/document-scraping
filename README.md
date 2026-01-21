@@ -25,7 +25,9 @@ Sistema modular para extraer y analizar contenido de documentos PDF y PowerPoint
 pip install -r requirements.txt
 ```
 
-### Requisito adicional: Tesseract OCR
+### Requisitos adicionales
+
+#### 1. Tesseract OCR (Obligatorio)
 
 Para el filtrado de imágenes, instala Tesseract:
 
@@ -45,6 +47,36 @@ brew install tesseract
 **Linux:**
 ```bash
 sudo apt-get install tesseract-ocr
+```
+
+#### 2. LibreOffice (Para procesar PPTX)
+
+Si necesitas procesar archivos PowerPoint (.pptx), instala LibreOffice:
+
+**Windows:**
+```powershell
+# Con chocolatey (recomendado)
+choco install libreoffice
+
+# O descargar desde: https://www.libreoffice.org/download/download/
+```
+
+**macOS:**
+```bash
+brew install --cask libreoffice
+```
+
+**Linux:**
+```bash
+sudo apt-get install libreoffice
+```
+
+**Alternativa en Windows:** Si tienes Microsoft PowerPoint instalado, el sistema lo usará automáticamente (mayor calidad).
+
+**Verificar instalación:**
+```bash
+# Debería mostrar la versión instalada
+soffice --version
 ```
 
 ## 🔧 Configuración
@@ -175,7 +207,48 @@ Algunos PDFs renderizan gráficos donde las barras/líneas son imágenes pero lo
    pero el OCR de la imagen detectó pocos números → es un gráfico compuesto
 5. Al analizar con IA, se incluye el texto extraído como contexto adicional
 
-### 5. Clasificación de Insights y Filtrado
+### 5. Conversión Automática de PowerPoint (PPTX → PDF)
+
+El sistema convierte automáticamente archivos PPTX a PDF antes del análisis, aprovechando todo el pipeline existente (incluyendo detección de gráficos compuestos):
+
+```json
+{
+  "extraction": {
+    "pptx_conversion": {
+      "enabled": true,
+      "backend": "auto",          // "auto", "libreoffice", o "powerpoint"
+      "dpi": 300,                 // Resolución de conversión (mayor = mejor calidad)
+      "delete_temp_pdf": false,   // Si eliminar PDF temporal después del análisis
+      "temp_dir": "output/temp_pdfs"  // Directorio para PDFs temporales
+    }
+  }
+}
+```
+
+**Backends disponibles:**
+
+| Backend | Requisito | Calidad | Plataforma |
+|---------|-----------|---------|------------|
+| `libreoffice` | LibreOffice instalado | Muy buena | Windows/Mac/Linux |
+| `powerpoint` | Microsoft PowerPoint | Excelente | Solo Windows |
+| `auto` | Detecta automáticamente | - | Todas (preferencia: PowerPoint → LibreOffice) |
+
+**¿Cómo funciona?**
+1. Detecta archivos `.pptx` al procesar
+2. Convierte a PDF usando el backend disponible
+3. Guarda el PDF en `temp_dir` (default: `output/temp_pdfs/`)
+4. Procesa el PDF normalmente con todo el pipeline
+5. Opcionalmente elimina el PDF temporal si `delete_temp_pdf: true`
+
+**Ventajas:**
+- ✅ Aprovecha toda la infraestructura de análisis de PDFs
+- ✅ Detecta gráficos compuestos en presentaciones
+- ✅ Mantiene alta calidad de conversión (DPI configurable)
+- ✅ Funciona automáticamente sin intervención manual
+
+**Nota:** Se recomienda `delete_temp_pdf: false` para debugging. Si algo falla, puedes revisar el PDF generado.
+
+### 6. Clasificación de Insights y Filtrado
 
 El sistema clasifica cada insight en tres categorías según su valor analítico:
 
@@ -221,17 +294,32 @@ Las observaciones metodológicas ("El estudio abarca 2015-2025", "La muestra inc
 ### Ejemplos Básicos
 
 ```bash
-# Análisis genérico (sin contexto de dominio)
+# Análisis genérico de PDF (sin contexto de dominio)
 python main.py documento.pdf
+
+# Procesar presentación PowerPoint (auto-convierte a PDF)
+python main.py presentacion.pptx
 
 # Con prompts específicos del sector AFP chileno
 python main.py informe_afp.pdf --domain-prompts afp_chile
 
-# Con configuración personalizada (ej: API keys, filtros personalizados)
-python main.py documento.pptx --config private_config.json
+# Procesar PPTX con contexto de dominio
+python main.py reporte_afp.pptx --domain-prompts afp_chile
 
-# Combinando opciones
-python main.py reporte.pdf --config custom.json --domain-prompts finanzas
+# Con configuración personalizada (ej: API keys, filtros personalizados)
+python main.py documento.pdf --config private_config.json
+
+# Procesar múltiples archivos (wildcards)
+python main.py *.pdf --domain-prompts afp_chile
+python main.py *.pptx --domain-prompts finanzas
+
+# Exportar también a formato Word (.docx)
+python main.py reporte.pdf --export-docx
+
+# Combinando todas las opciones
+python main.py presentacion.pptx --config custom.json --domain-prompts finanzas --export-docx
+# Combinando todas las opciones
+python main.py presentacion.pptx --config custom.json --domain-prompts finanzas --export-docx
 
 # Solo hallazgos cuantitativos (sin hipótesis ni observaciones)
 # Editar config.json: "insight_filter": "findings"
@@ -241,10 +329,11 @@ python main.py estudio.pdf --config config.json
 ### Argumentos Disponibles
 
 ```
-python main.py <archivo> [opciones]
+python main.py <archivo(s)> [opciones]
 
 Argumentos posicionales:
-  archivo                  Ruta al PDF o PPTX a procesar
+  archivo(s)               Ruta(s) al PDF o PPTX a procesar
+                          Acepta múltiples archivos o wildcards (*.pdf, *.pptx)
 
 Opciones:
   --config PATH            Ruta al archivo de configuración
@@ -257,6 +346,8 @@ Opciones:
   --export-docx            Exportar también a tabla Word (.docx)
                           Genera un inventario de conclusiones en formato tabla
 ```
+
+**Nota sobre PPTX:** Los archivos PowerPoint se convierten automáticamente a PDF antes del análisis. Requiere LibreOffice o PowerPoint instalado (ver sección de instalación).
 
 ### Crear Contexto de Dominio Personalizado
 

@@ -5,7 +5,7 @@ from typing import List
 from pydantic_ai import Agent, BinaryContent
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
-from models import ChartData, ChartResource, ChartAnalysisResult, ImageData, Config, TextData, TextAnalysis
+from models import ChartData, ChartResource, ChartAnalysisResult, ImageData, Config, TextData, TextAnalysis, DocumentMetadata
 
 
 class DocumentAnalyzer:
@@ -67,6 +67,26 @@ class DocumentAnalyzer:
         
         # Modo verbose para logging detallado
         self.verbose = self.config.analysis.get('verbose', True)
+        
+        # Crear agente para metadata (ligero, sin prompts de dominio)
+        self.metadata_agent = Agent[None, DocumentMetadata](
+            model=model,
+            output_type=DocumentMetadata,
+            system_prompt="""Extrae metadata del documento analizando el título, portada y primeras páginas.
+
+IMPORTANTE: Extrae SOLO lo que esté explícitamente mencionado. Si no encuentras un dato, deja el campo en null.
+
+Busca:
+- **study_year**: Año del estudio/documento (formato YYYY, ej: 2024, 2017)
+- **study_name**: Título o nombre completo del estudio
+- **company**: Empresa, consultora o entidad que realizó el estudio
+- **report_type**: Tipo de documento (informe, presentación, análisis, etc.)
+
+Ejemplos:
+- "Informe de Satisfacción 2024 - AFP Habitat" → year:2024, name:"Informe de Satisfacción", company:"AFP Habitat"
+- "Ipsos: Estudio WhatsApp 2025" → year:2025, name:"Estudio WhatsApp", company:"Ipsos"
+- "Segmentación Steerco 2017" → year:2017, name:"Segmentación Steerco", company:null"""
+        )
         
         print(f"✓ Agente inicializado con {provider.upper()}: {model_name}")
     
@@ -322,6 +342,44 @@ proporcionar un análisis completo y preciso."""
         print(f"  ✓ {analyzed_count} páginas analizadas con IA")
         
         return text_data
+    
+    def extract_metadata(self, filename: str, text_data: List[TextData]) -> DocumentMetadata:
+        """
+        Extrae metadata del documento usando las primeras páginas.
+        
+        Args:
+            filename: Nombre del archivo
+            text_data: Lista de páginas de texto extraídas
+        
+        Returns:
+            DocumentMetadata con información del estudio
+        """
+        # Tomar las primeras 3 páginas para buscar metadata
+        first_pages = text_data[:3] if len(text_data) >= 3 else text_data
+        combined_text = "\n\n".join([
+            f"--- Página {td.page_number} ---\n{td.content[:1000]}" 
+            for td in first_pages
+        ])
+        
+        # Agregar el nombre del archivo como contexto
+        prompt_text = f"Nombre del archivo: {filename}\n\n{combined_text}"
+        
+        if self.verbose:
+            print(f"  → Extrayendo metadata del documento...")
+        
+        try:
+            result = self.metadata_agent.run_sync(prompt_text)
+            metadata = result.data
+            
+            if self.verbose:
+                print(f"     Año: {metadata.study_year or 'N/A'}")
+                print(f"     Nombre: {metadata.study_name or 'N/A'}")
+                print(f"     Empresa: {metadata.company or 'N/A'}")
+            
+            return metadata
+        except Exception as e:
+            print(f"  ⚠️  Error extrayendo metadata: {e}")
+            return DocumentMetadata()
 
 
 if __name__ == "__main__":
