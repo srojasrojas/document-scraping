@@ -74,8 +74,21 @@ class StudySynthesizer:
             model = AnthropicModel(model_name, api_key=api_key)
         elif provider == 'openai':
             api_key = os.getenv('OPENAI_API_KEY') or config_data.get('analysis', {}).get('openai_api_key')
+            
+            if not api_key:
+                raise ValueError(
+                    "Se requiere API key para OpenAI. Configura:\n"
+                    "  1. Variable de entorno: export OPENAI_API_KEY='tu-key'\n"
+                    "  2. O en config.json: 'openai_api_key': 'tu-key'"
+                )
+            
+            # Si la key viene de config, establecerla como variable de entorno
             if not os.getenv('OPENAI_API_KEY'):
                 os.environ['OPENAI_API_KEY'] = api_key
+                print(f"  → Usando OpenAI API key desde config")
+            else:
+                print(f"  → Usando OpenAI API key desde entorno")
+            
             model = OpenAIChatModel(model_name)
         else:
             raise ValueError(f"Proveedor no soportado: {provider}")
@@ -285,9 +298,21 @@ IMPORTANTE: Consolidar solo insights que hablen del mismo concepto/métrica."""
         try:
             result = self.synthesis_agent.run_sync(context)
             
+            # Extraer el resultado (manejar diferentes estructuras de respuesta)
+            synthesis_result = None
+            if isinstance(result, SynthesisResult):
+                synthesis_result = result
+            elif hasattr(result, 'output') and isinstance(result.output, SynthesisResult):
+                synthesis_result = result.output
+            elif hasattr(result, 'data') and isinstance(result.data, SynthesisResult):
+                synthesis_result = result.data
+            else:
+                print(f"  ⚠️  Resultado no estructurado para '{theme}': {type(result)}")
+                return None
+            
             # Tomar el primer insight consolidado (debería haber solo uno por tema)
-            if result.data.consolidated_insights:
-                insight = result.data.consolidated_insights[0]
+            if synthesis_result.consolidated_insights:
+                insight = synthesis_result.consolidated_insights[0]
                 insight.supporting_claims = claim_refs
                 return insight
             
