@@ -181,6 +181,7 @@ Devuelve la información en el siguiente formato JSON (ajustado al schema ChartD
 4. **CONTEXTO**: Los insights deben ser específicos y basados en los datos
 5. **ESTRUCTURA**: Mantén la correspondencia exacta entre categorías y valores
 6. **UNIDADES**: Siempre incluye las unidades de medida cuando estén disponibles
+7. **FILTRO DE AUTO-PROMOCIÓN**: NO incluyas como insights menciones auto-promocionales de la empresa/consultora que realizó el estudio (ej: "Ipsos es líder en el mercado"). Enfócate en los resultados del estudio, no en marketing de la consultora.
 
 ## Manejo de Casos Especiales
 

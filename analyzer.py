@@ -72,20 +72,34 @@ class DocumentAnalyzer:
         self.metadata_agent = Agent[None, DocumentMetadata](
             model=model,
             output_type=DocumentMetadata,
-            system_prompt="""Extrae metadata del documento analizando el título, portada y primeras páginas.
+            system_prompt="""Extrae metadata del documento analizando EL NOMBRE DEL ARCHIVO, título, portada y primeras páginas.
 
-IMPORTANTE: Extrae SOLO lo que esté explícitamente mencionado. Si no encuentras un dato, deja el campo en null.
+CRÍTICO: El nombre del archivo suele contener información valiosa sobre año, empresa y nombre del estudio.
 
-Busca:
-- **study_year**: Año del estudio/documento (formato YYYY, ej: 2024, 2017)
-- **study_name**: Título o nombre completo del estudio
-- **company**: Empresa, consultora o entidad que realizó el estudio
-- **report_type**: Tipo de documento (informe, presentación, análisis, etc.)
+**Prioridad de fuentes:**
+1. **Nombre del archivo**: Parsea año (YYYY o YY), nombres de empresas, palabras clave del estudio
+2. **Portada/Título**: Busca información formal del documento
+3. **Primeras páginas**: Metadata adicional en encabezados o pie de página
 
-Ejemplos:
-- "Informe de Satisfacción 2024 - AFP Habitat" → year:2024, name:"Informe de Satisfacción", company:"AFP Habitat"
-- "Ipsos: Estudio WhatsApp 2025" → year:2025, name:"Estudio WhatsApp", company:"Ipsos"
-- "Segmentación Steerco 2017" → year:2017, name:"Segmentación Steerco", company:null"""
+**Ejemplos de parseo del nombre de archivo:**
+- "2024_informe_satisfaccion_afp_habitat.pdf" → year:2024, name:"Informe de Satisfacción", company:"AFP Habitat"
+- "2025_Ipsos_estudio_whatsapp.pptx" → year:2025, company:"Ipsos", name:"Estudio WhatsApp"
+- "2017_Steerco2Segmentacion_v_resumida3.pdf" → year:2017, name:"Segmentación Steerco"
+- "informe_resultados_2023_habitat.pdf" → year:2023, company:"Habitat", name:"Informe de Resultados"
+
+**Heurísticas de parseo:**
+- Años: 4 dígitos (2020-2030) o 2 dígitos al inicio (17→2017, 25→2025)
+- Empresas comunes: Ipsos, Habitat, AFP, Cadem, GfK, Nielsen, Adimark
+- Guiones bajos (_) y guiones (-) separan componentes
+- "V1", "v2", "resumida", "final" son versiones, NO parte del nombre
+
+IMPORTANTE: Si no encuentras un dato con certeza, deja el campo en null. No inventes.
+
+**Campos a extraer:**
+- **study_year**: Año del estudio (YYYY)
+- **study_name**: Título/nombre del estudio
+- **company**: Empresa/consultora responsable
+- **report_type**: Tipo (informe, presentación, análisis, etc.)"""
         )
         
         print(f"✓ Agente inicializado con {provider.upper()}: {model_name}")
@@ -345,10 +359,10 @@ proporcionar un análisis completo y preciso."""
     
     def extract_metadata(self, filename: str, text_data: List[TextData]) -> DocumentMetadata:
         """
-        Extrae metadata del documento usando las primeras páginas.
+        Extrae metadata del documento usando el nombre del archivo y las primeras páginas.
         
         Args:
-            filename: Nombre del archivo
+            filename: Nombre del archivo (se parsea para extraer año, empresa, etc.)
             text_data: Lista de páginas de texto extraídas
         
         Returns:
@@ -361,8 +375,13 @@ proporcionar un análisis completo y preciso."""
             for td in first_pages
         ])
         
-        # Agregar el nombre del archivo como contexto
-        prompt_text = f"Nombre del archivo: {filename}\n\n{combined_text}"
+        # Agregar el nombre del archivo como contexto PRINCIPAL
+        prompt_text = f"""NOMBRE DEL ARCHIVO: {filename}
+
+Analiza el nombre del archivo para extraer año, empresa y nombre del estudio.
+Luego complementa con información de las primeras páginas:
+
+{combined_text}"""
         
         if self.verbose:
             print(f"  → Extrayendo metadata del documento...")

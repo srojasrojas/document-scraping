@@ -122,6 +122,7 @@ Extrae la información en formato estructurado:
 3. **RELEVANCIA**: Prioriza información cuantitativa y decisiones/resultados clave
 4. **ESTRUCTURA**: Organiza por categorías lógicas
 5. **COMPLETITUD**: No omitas métricas numéricas visibles
+6. **FILTRO DE AUTO-PROMOCIÓN**: NO incluyas como insights menciones auto-promocionales de la empresa/consultora que realizó el estudio (ej: "Ipsos es líder", "metodología exclusiva de X"). Estos datos van en metadata, no en insights.
 
 ## Ejemplo
 

@@ -397,7 +397,84 @@ Prompt Final = Prompt Base + Prompt de Dominio (opcional)
 
 Ver [prompts/README.md](prompts/README.md) para guías detalladas.
 
-## 📁 Estructura de Archivos
+## � Síntesis Multi-Estudios
+
+El módulo `synthesizer.py` consolida insights de múltiples estudios, identificando:
+- ✅ Conclusiones recurrentes y consistentes
+- ⚠️ Contradicciones entre estudios  
+- 📊 Evolución temporal de métricas
+
+### Uso del Sintetizador
+
+```bash
+# Sintetizar todos los análisis previos
+python synthesizer.py output/data/*.ndjson
+
+# Solo hallazgos (excluir hipótesis)
+python synthesizer.py output/data/*.ndjson --only-findings
+
+# Filtrar por temas específicos
+python synthesizer.py output/data/*.ndjson --themes satisfaccion,NPS,canales
+
+# Especificar archivo de salida
+python synthesizer.py output/data/*.ndjson --output synthesis_afp_2024
+```
+
+### ¿Qué Hace el Sintetizador?
+
+1. **Carga claims** de múltiples archivos NDJSON
+2. **Agrupa por tema** usando `theme_tags` 
+3. **Consolida con IA** para identificar patrones
+4. **Detecta contradicciones** entre estudios
+5. **Genera reporte** con tablas comparativas
+
+### Ejemplo de Salida
+
+```markdown
+## ✅ Conclusiones Altamente Consistentes
+
+### 1. Satisfacción General
+
+La satisfacción general se mantiene consistentemente entre 65-71% en todos los estudios.
+
+| Estudio | Año | Claim | N | Pág. |
+|---------|-----|-------|---|------|
+| Informe Satisfacción | 2024 | 68% satisfacción | 1,260 | p.12 |
+| Estudio WhatsApp | 2025 | 71% satisfacción | 890 | p.8 |
+| Diagnóstico Clientes | 2025 | 65% satisfacción | 2,100 | p.15 |
+
+**Nivel de consistencia**: ✅ Alta consistencia
+
+---
+
+## ⚠️ Contradicciones Detectadas
+
+### 1. Net Promoter Score (NPS)
+
+Contradicción importante: un estudio reporta NPS positivo (60) mientras otro reporta NPS negativo (-18).
+
+**Explicación**: Diferencia de 78 puntos sugiere diferentes poblaciones, metodologías o períodos. Requiere revisión.
+
+**Rango de variación**: -18 a 60
+```
+
+### Niveles de Consistencia
+
+| Nivel | Descripción | Criterio |
+|-------|-------------|----------|
+| **HIGH** | Alta consistencia | 3+ estudios, variación <10pp |
+| **MEDIUM** | Consistencia media | 2 estudios, variación 10-20pp |
+| **LOW** | Baja recurrencia | Solo 1 estudio |
+| **CONTRADICTION** | Contradicción | Conclusiones opuestas, diferencia >30pp |
+
+### Archivos Generados
+
+- `synthesis.md`: Reporte en Markdown con tablas comparativas
+- `synthesis.json`: Datos estructurados para análisis programático
+
+**Costo estimado**: ~5-10 llamadas LLM para 5 estudios ≈ $0.05-0.10 USD
+
+## �📁 Estructura de Archivos
 
 ```
 .
@@ -405,8 +482,12 @@ Ver [prompts/README.md](prompts/README.md) para guías detalladas.
 ├── private_config.json            # (opcional) Config con API keys - no versionar
 ├── models.py                      # Modelos Pydantic
 ├── extractor.py                   # Extracción de PDF/PPT
+├── pptx_converter.py              # Conversión PPTX→PDF
 ├── image_filter.py                # Filtrado de imágenes con OCR
-├── analyzer.py                    # Análisis con IA
+├── composite_detector.py          # Detección de gráficos compuestos
+├── analyzer.py                    # Análisis con IA (individual)
+├── synthesizer.py                 # Síntesis multi-estudios
+├── docx_exporter.py               # Exportador a Word
 ├── main.py                        # Script principal
 ├── prompts/                       # Sistema de prompts modular
 │   ├── README.md                  # Guía de prompts
@@ -419,8 +500,14 @@ Ver [prompts/README.md](prompts/README.md) para guías detalladas.
 ├── output/                        # Directorio de salida
     ├── images/                    # Imágenes extraídas y filtradas
     ├── text/                      # Texto extraído por página
+    ├── temp_pdfs/                 # PDFs temporales de conversión PPTX
     └── data/                      # Análisis completo
         ├── documento_analysis.ndjson       # Claims en formato NDJSON
+        ├── insights-documento.md           # Resumen Markdown
+        └── documento_analysis.docx         # Tabla Word (opcional)
+    └── synthesis.md               # Síntesis multi-estudios
+    └── synthesis.json             # Datos de síntesis estructurados
+```
         ├── documento_analysis.docx         # Tabla Word (opcional)
         └── insights-documento.md           # Resumen legible filtrado
 ```

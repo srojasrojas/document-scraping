@@ -57,6 +57,51 @@ def filter_insights_by_type(insights: list, insight_filter: str) -> list:
     return insights
 
 
+def filter_self_promotional_insights(insights: list, company_name: str = None) -> list:
+    """
+    Filtra insights auto-promocionales de la empresa que hizo el estudio.
+    
+    Ejemplos de insights a filtrar:
+    - "Ipsos es la consultora líder en Chile"
+    - "Metodología exclusiva de Cadem"
+    - "GfK tiene presencia en 100 países"
+    
+    Args:
+        insights: Lista de InsightItem
+        company_name: Nombre de la empresa/consultora del estudio
+    
+    Returns:
+        Lista filtrada sin auto-promoción
+    """
+    if not company_name:
+        return insights
+    
+    # Palabras clave que indican auto-promoción
+    promotional_keywords = [
+        "líder", "lider", "mejor", "más grande", "mayor", "principal",
+        "pionero", "experto", "especialista", "exclusiv", "único", "unica",
+        "reconocid", "prestigio", "trayectoria", "experiencia de",
+        "presencia en", "oficinas en", "clientes en"
+    ]
+    
+    filtered = []
+    company_lower = company_name.lower()
+    
+    for insight in insights:
+        text_lower = insight.text.lower()
+        
+        # Si el insight menciona la empresa Y contiene palabras promocionales, descartarlo
+        if company_lower in text_lower:
+            is_promotional = any(keyword in text_lower for keyword in promotional_keywords)
+            if is_promotional:
+                # Descartar este insight
+                continue
+        
+        filtered.append(insight)
+    
+    return filtered
+
+
 def save_ndjson(analysis: DocumentAnalysis, output_file: Path, source_file: str) -> Path:
     """
     Guarda el análisis en formato NDJSON con registros meta/claim/summary.
@@ -64,13 +109,19 @@ def save_ndjson(analysis: DocumentAnalysis, output_file: Path, source_file: str)
     """
     ndjson_file = output_file.with_suffix('.ndjson')
     
+    # Obtener nombre de la empresa para filtrar auto-promoción
+    company_name = analysis.metadata.company if analysis.metadata else None
+    
     # Recopilar todos los claims con IDs únicos
     claims = []
     claim_id = 1
     
     # Claims de gráficos/imágenes
     for chart in analysis.chart_analysis:
-        for insight in chart.insights:
+        # Filtrar insights auto-promocionales
+        filtered_insights = filter_self_promotional_insights(chart.insights, company_name)
+        
+        for insight in filtered_insights:
             claims.append({
                 "type": "claim",
                 "id": f"C{claim_id:03d}",
@@ -94,7 +145,10 @@ def save_ndjson(analysis: DocumentAnalysis, output_file: Path, source_file: str)
     # Claims del análisis de texto
     for td in analysis.text_data:
         if td.ai_analysis and td.ai_analysis.insights:
-            for insight in td.ai_analysis.insights:
+            # Filtrar insights auto-promocionales
+            filtered_insights = filter_self_promotional_insights(td.ai_analysis.insights, company_name)
+            
+            for insight in filtered_insights:
                 claims.append({
                     "type": "claim",
                     "id": f"C{claim_id:03d}",
@@ -223,6 +277,9 @@ def create_insights_summary(
     content += f"**Filtro**: {filter_label.get(insight_filter, insight_filter)} | **Umbral relevancia**: {relevance_threshold}\n\n"
     content += "---\n\n"
     
+    # Obtener nombre de empresa para filtrar auto-promoción
+    company_name = analysis.metadata.company if analysis.metadata else None
+    
     has_insights = False
     total_findings = 0
     total_hypotheses = 0
@@ -237,7 +294,9 @@ def create_insights_summary(
         # Filtrar charts que tengan insights del tipo deseado
         charts_with_filtered_insights = []
         for chart in relevant_charts:
-            filtered = filter_insights_by_type(chart.insights, insight_filter)
+            # Primero filtrar auto-promoción, luego por tipo
+            filtered = filter_self_promotional_insights(chart.insights, company_name)
+            filtered = filter_insights_by_type(filtered, insight_filter)
             if filtered:
                 charts_with_filtered_insights.append((chart, filtered))
         
@@ -267,7 +326,9 @@ def create_insights_summary(
     # Filtrar páginas que tengan insights del tipo deseado
     pages_with_filtered_insights = []
     for td in text_pages_with_insights:
-        filtered = filter_insights_by_type(td.ai_analysis.insights, insight_filter)
+        # Primero filtrar auto-promoción, luego por tipo
+        filtered = filter_self_promotional_insights(td.ai_analysis.insights, company_name)
+        filtered = filter_insights_by_type(filtered, insight_filter)
         if filtered:
             pages_with_filtered_insights.append((td, filtered))
     
