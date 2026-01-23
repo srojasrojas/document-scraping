@@ -357,48 +357,265 @@ proporcionar un análisis completo y preciso."""
         
         return text_data
     
+    def _parse_filename_metadata(self, filename: str) -> DocumentMetadata:
+        """
+        Extrae metadata del nombre del archivo usando regex.
+        Este es el método principal y garantizado para extraer año, empresa y nombre.
+        
+        Ejemplos de nombres soportados:
+        - 2024_informe_resultados_afp_habitat.pdf
+        - 2025_Ipsos_estudio_nuevo_canal_whatsapp.pdf
+        - Informe_Semestral_Sector_AFP_1°-2025.pdf
+        - 2017_Steerco2Segmentacion_v_resumida3.pdf
+        """
+        import re
+        
+        # Limpiar extensión y obtener nombre base
+        name_without_ext = Path(filename).stem
+        
+        # Normalizar separadores a espacios para facilitar parseo
+        normalized = re.sub(r'[_\-]+', ' ', name_without_ext)
+        
+        # ===== EXTRAER AÑO =====
+        study_year = None
+        
+        # Patrón 1: Año de 4 dígitos (2017-2030)
+        year_match = re.search(r'\b(20[1-3]\d)\b', normalized)
+        if year_match:
+            study_year = int(year_match.group(1))
+        else:
+            # Patrón 2: Año de 2 dígitos al inicio (17, 24, 25 -> 2017, 2024, 2025)
+            year_2digit = re.match(r'^(\d{2})\s', normalized)
+            if year_2digit:
+                year_val = int(year_2digit.group(1))
+                if 15 <= year_val <= 30:
+                    study_year = 2000 + year_val
+            else:
+                # Patrón 3: Año de 2 dígitos al final con mes (Ago25, Dic24, etc.)
+                year_with_month = re.search(r'(?:Ene|Feb|Mar|Abr|May|Jun|Jul|Ago|Sep|Oct|Nov|Dic)\s*(\d{2})\b', normalized, re.IGNORECASE)
+                if year_with_month:
+                    year_val = int(year_with_month.group(1))
+                    if 15 <= year_val <= 30:
+                        study_year = 2000 + year_val
+        
+        # ===== EXTRAER EMPRESA =====
+        company = None
+        
+        # Lista de empresas/consultoras conocidas (case-insensitive)
+        known_companies = [
+            ('ipsos', 'Ipsos'),
+            ('cadem', 'Cadem'),
+            ('gfk', 'GfK'),
+            ('nielsen', 'Nielsen'),
+            ('adimark', 'Adimark'),
+            ('criteria', 'Criteria'),
+            ('feedback', 'Feedback'),
+            ('habitat', 'AFP Habitat'),
+            ('afp habitat', 'AFP Habitat'),
+            ('provida', 'AFP Provida'),
+            ('cuprum', 'AFP Cuprum'),
+            ('capital', 'AFP Capital'),
+            ('modelo', 'AFP Modelo'),
+            ('planvital', 'AFP PlanVital'),
+            ('chilquinta', 'Chilquinta'),
+            ('steerco', 'Steerco'),
+            ('bbk', 'BBK'),
+            ('ocular', 'Ocular'),
+            ('prudential', 'Prudential'),
+        ]
+        
+        normalized_lower = normalized.lower()
+        for pattern, company_name in known_companies:
+            if pattern in normalized_lower:
+                company = company_name
+                break
+        
+        # ===== EXTRAER NOMBRE DEL ESTUDIO =====
+        study_name = None
+        
+        # Remover año, versiones y empresa del nombre
+        name_cleaned = normalized
+        
+        # Remover año (4 dígitos)
+        name_cleaned = re.sub(r'\b20[1-3]\d\b', '', name_cleaned)
+        # Remover año (2 dígitos al inicio)
+        name_cleaned = re.sub(r'^\d{2}\s+', '', name_cleaned)
+        # Remover mes+año abreviado (Ago25, Dic24, etc.)
+        name_cleaned = re.sub(r'\b(?:Ene|Feb|Mar|Abr|May|Jun|Jul|Ago|Sep|Oct|Nov|Dic)\s*\d{2}\b', '', name_cleaned, flags=re.IGNORECASE)
+        # Remover indicadores de versión
+        name_cleaned = re.sub(r'\b[vV]\d+\b', '', name_cleaned)
+        name_cleaned = re.sub(r'\bpensionv\d+\b', 'pension', name_cleaned, flags=re.IGNORECASE)  # Caso especial
+        name_cleaned = re.sub(r'\bresumida?\d*\b', '', name_cleaned, flags=re.IGNORECASE)
+        name_cleaned = re.sub(r'\bfinal\d*\b', '', name_cleaned, flags=re.IGNORECASE)
+        # Remover empresas conocidas
+        for pattern, _ in known_companies:
+            name_cleaned = re.sub(rf'\b{re.escape(pattern)}\b', '', name_cleaned, flags=re.IGNORECASE)
+        # Remover "AFP" suelto y números sueltos al final
+        name_cleaned = re.sub(r'\bafp\b', '', name_cleaned, flags=re.IGNORECASE)
+        name_cleaned = re.sub(r'\s+\d+\s*$', '', name_cleaned)  # Remover números al final
+        # Limpiar espacios múltiples
+        name_cleaned = re.sub(r'\s+', ' ', name_cleaned).strip()
+        
+        # Capitalizar el nombre si hay algo útil
+        if name_cleaned and len(name_cleaned) > 3:
+            # Capitalizar primera letra de cada palabra significativa
+            words = name_cleaned.split()
+            # Filtrar palabras muy cortas o numéricas
+            words = [w for w in words if len(w) > 1 and not w.isdigit()]
+            if words:
+                study_name = ' '.join(w.capitalize() for w in words)
+        
+        # ===== DETECTAR TIPO DE REPORTE =====
+        report_type = None
+        type_patterns = [
+            (r'\binforme\b', 'Informe'),
+            (r'\bestudio\b', 'Estudio'),
+            (r'\bpresentaci[oó]n\b', 'Presentación'),
+            (r'\bresumen\b', 'Resumen'),
+            (r'\banalisis\b', 'Análisis'),
+            (r'\bdiagn[oó]stico\b', 'Diagnóstico'),
+            (r'\bresultados\b', 'Informe de Resultados'),
+            (r'\bsemestral\b', 'Informe Semestral'),
+        ]
+        
+        for pattern, type_name in type_patterns:
+            if re.search(pattern, normalized_lower):
+                report_type = type_name
+                break
+        
+        if self.verbose:
+            print(f"  📁 Metadata parseada del nombre del archivo:")
+            print(f"     Año: {study_year or 'N/A'}")
+            print(f"     Empresa: {company or 'N/A'}")
+            print(f"     Nombre: {study_name or 'N/A'}")
+            print(f"     Tipo: {report_type or 'N/A'}")
+        
+        return DocumentMetadata(
+            study_year=study_year,
+            study_name=study_name,
+            company=company,
+            report_type=report_type
+        )
+    
+    def _extract_metadata_from_text(self, text_data: List[TextData]) -> DocumentMetadata:
+        """
+        Intenta extraer metadata adicional del contenido del documento.
+        Complementa lo obtenido del nombre del archivo.
+        """
+        import re
+        
+        if not text_data:
+            return DocumentMetadata()
+        
+        # Combinar primeras 3 páginas
+        first_pages_text = "\n".join([td.content[:1500] for td in text_data[:3]])
+        
+        # Buscar año en el texto (si no se encontró en el nombre)
+        study_year = None
+        year_patterns = [
+            r'(?:estudio|informe|reporte|encuesta)\s+(?:de\s+)?(\d{4})',
+            r'(\d{4})\s*[-–]\s*\d{4}',  # Rangos como 2024-2025
+            r'(?:año|period[oa])\s+(\d{4})',
+            r'(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\s+(?:de\s+)?(\d{4})',
+        ]
+        for pattern in year_patterns:
+            match = re.search(pattern, first_pages_text, re.IGNORECASE)
+            if match:
+                year_val = int(match.group(1))
+                if 2015 <= year_val <= 2030:
+                    study_year = year_val
+                    break
+        
+        # Buscar empresa en el texto
+        company = None
+        company_patterns = [
+            r'(?:elaborado|realizado|preparado)\s+por\s+([A-Z][a-zA-Z\s]+?)(?:\.|,|\n)',
+            r'(?:©|copyright)\s*\d{4}\s+([A-Z][a-zA-Z\s]+?)(?:\.|,|\n)',
+            r'^([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\s*[-–—]\s*(?:Estudio|Informe)',
+        ]
+        for pattern in company_patterns:
+            match = re.search(pattern, first_pages_text, re.MULTILINE)
+            if match:
+                company = match.group(1).strip()
+                break
+        
+        return DocumentMetadata(
+            study_year=study_year,
+            company=company
+        )
+    
     def extract_metadata(self, filename: str, text_data: List[TextData]) -> DocumentMetadata:
         """
-        Extrae metadata del documento usando el nombre del archivo y las primeras páginas.
+        Extrae metadata del documento usando un enfoque híbrido:
+        1. Parseo del nombre del archivo (principal, siempre funciona)
+        2. Extracción del contenido del texto (complementario)
+        3. Opcionalmente, refinamiento con IA
         
         Args:
-            filename: Nombre del archivo (se parsea para extraer año, empresa, etc.)
+            filename: Nombre del archivo
             text_data: Lista de páginas de texto extraídas
         
         Returns:
             DocumentMetadata con información del estudio
         """
-        # Tomar las primeras 3 páginas para buscar metadata
-        first_pages = text_data[:3] if len(text_data) >= 3 else text_data
-        combined_text = "\n\n".join([
-            f"--- Página {td.page_number} ---\n{td.content[:1000]}" 
-            for td in first_pages
-        ])
-        
-        # Agregar el nombre del archivo como contexto PRINCIPAL
-        prompt_text = f"""NOMBRE DEL ARCHIVO: {filename}
-
-Analiza el nombre del archivo para extraer año, empresa y nombre del estudio.
-Luego complementa con información de las primeras páginas:
-
-{combined_text}"""
-        
         if self.verbose:
             print(f"  → Extrayendo metadata del documento...")
         
-        try:
-            result = self.metadata_agent.run_sync(prompt_text)
-            metadata = result.data
-            
+        # Paso 1: Parsear nombre del archivo (SIEMPRE funciona)
+        filename_metadata = self._parse_filename_metadata(filename)
+        
+        # Paso 2: Extraer del contenido del texto (complementario)
+        text_metadata = self._extract_metadata_from_text(text_data)
+        
+        # Paso 3: Merge - priorizar filename, complementar con text
+        final_metadata = DocumentMetadata(
+            study_year=filename_metadata.study_year or text_metadata.study_year,
+            study_name=filename_metadata.study_name,
+            company=filename_metadata.company or text_metadata.company,
+            report_type=filename_metadata.report_type
+        )
+        
+        # Paso 4 (opcional): Si faltan datos críticos, intentar con IA
+        use_ai_fallback = self.config.analysis.get('metadata_ai_fallback', False)
+        
+        if use_ai_fallback and (not final_metadata.study_year or not final_metadata.study_name):
             if self.verbose:
-                print(f"     Año: {metadata.study_year or 'N/A'}")
-                print(f"     Nombre: {metadata.study_name or 'N/A'}")
-                print(f"     Empresa: {metadata.company or 'N/A'}")
-            
-            return metadata
-        except Exception as e:
-            print(f"  ⚠️  Error extrayendo metadata: {e}")
-            return DocumentMetadata()
+                print(f"  🤖 Intentando extracción con IA (faltan datos)...")
+            try:
+                first_pages = text_data[:2] if len(text_data) >= 2 else text_data
+                combined_text = "\n".join([td.content[:800] for td in first_pages])
+                
+                prompt_text = f"""NOMBRE DEL ARCHIVO: {filename}
+
+Extrae el año del estudio y el nombre/título del estudio.
+Solo responde si estás seguro, de lo contrario deja null.
+
+Texto de las primeras páginas:
+{combined_text[:2000]}"""
+                
+                result = self.metadata_agent.run_sync(prompt_text)
+                ai_metadata = result.data
+                
+                # Solo usar IA para llenar campos faltantes
+                if not final_metadata.study_year and ai_metadata.study_year:
+                    final_metadata.study_year = ai_metadata.study_year
+                if not final_metadata.study_name and ai_metadata.study_name:
+                    final_metadata.study_name = ai_metadata.study_name
+                if not final_metadata.company and ai_metadata.company:
+                    final_metadata.company = ai_metadata.company
+                    
+            except Exception as e:
+                if self.verbose:
+                    print(f"  ⚠️  Error en extracción IA: {e}")
+        
+        if self.verbose:
+            print(f"  ✓ Metadata final:")
+            print(f"     Año: {final_metadata.study_year or 'N/A'}")
+            print(f"     Nombre: {final_metadata.study_name or 'N/A'}")
+            print(f"     Empresa: {final_metadata.company or 'N/A'}")
+            print(f"     Tipo: {final_metadata.report_type or 'N/A'}")
+        
+        return final_metadata
 
 
 if __name__ == "__main__":

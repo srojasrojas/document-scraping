@@ -209,7 +209,11 @@ IMPORTANTE: Consolidar solo insights que hablen del mismo concepto/métrica."""
                 continue
             
             meta = json.loads(lines[0])
-            study_name = meta.get('study', {}).get('study_name', path.stem)
+            # Usar nombre del archivo si study_name es None o vacío
+            study_name = meta.get('study', {}).get('study_name')
+            if not study_name:
+                # Remover '_analysis' del stem para mejor legibilidad
+                study_name = path.stem.replace('_analysis', '')
             study_year = meta.get('study', {}).get('study_year')
             
             # Resto son claims
