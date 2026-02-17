@@ -15,6 +15,7 @@ output/
 *.pdf
 *.ppt
 *.pptx
+*.docx
 __pycache__/
 
 # Virtual environment
