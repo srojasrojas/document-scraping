@@ -374,7 +374,7 @@ def create_insights_summary(
 def process_document(file_path: str, config_path: str = "config.json", domain_prompts_file: str = None, export_docx: bool = False) -> DocumentAnalysis:
     """
     Procesa un documento completo:
-    1. Auto-convierte PPTX a PDF si es necesario
+    1. Auto-convierte PPTX/DOCX a PDF si es necesario
     2. Extrae texto e imágenes
     3. Analiza gráficos con IA (Claude o OpenAI)
     4. Guarda resultados
@@ -383,19 +383,36 @@ def process_document(file_path: str, config_path: str = "config.json", domain_pr
     ext = Path(file_path).suffix.lower()
     temp_pdf_created = False
     
+    # Cargar configuración una sola vez
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+    
     # Auto-convertir PPTX a PDF
     if ext in ['.ppt', '.pptx']:
         print(f"\n🔄 Detectado PowerPoint, convirtiendo a PDF...")
         from pptx_converter import convert_pptx_to_pdf
         
-        # Cargar configuración para temp_dir
-        with open(config_path, 'r') as f:
-            config = json.load(f)
         temp_dir = Path(config.get('extraction', {}).get('pptx_conversion', {}).get('temp_dir', 'output/temp_pdfs'))
         temp_dir.mkdir(parents=True, exist_ok=True)
         
         try:
             file_path = convert_pptx_to_pdf(file_path, str(temp_dir), config_path)
+            temp_pdf_created = True
+            print(f"   ✓ Convertido a: {file_path}\n")
+        except Exception as e:
+            print(f"   ❌ Error en conversión: {e}")
+            raise
+    
+    # Auto-convertir DOCX a PDF
+    elif ext in ['.doc', '.docx']:
+        print(f"\n🔄 Detectado Word, convirtiendo a PDF...")
+        from docx_converter import convert_docx_to_pdf
+        
+        temp_dir = Path(config.get('extraction', {}).get('docx_conversion', {}).get('temp_dir', 'output/temp_pdfs'))
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            file_path = convert_docx_to_pdf(file_path, str(temp_dir), config_path)
             temp_pdf_created = True
             print(f"   ✓ Convertido a: {file_path}\n")
         except Exception as e:
